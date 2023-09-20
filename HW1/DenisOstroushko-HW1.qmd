@@ -1,0 +1,356 @@
+---
+title: "Denis Ostroushko - HW1"
+format: 
+  pdf:
+    toc: false
+execute: 
+  echo: false
+  warning: false
+  message: false
+---
+
+
+```{r read packages }
+total_nchar = nchar(getwd())
+remove_nchar = nchar("HW1")
+path = substr(getwd(), 1, total_nchar - remove_nchar)
+source(paste0(path,"Master Packages.R"))
+```
+
+```{r read in data}
+data1 <- load("OPT_Study_PUBH7485_8485_2023.Rdata")
+
+# Notice that the result of this function is not assigned to an object name. When R calls load(), all of the R objects saved in the file are loaded into R. The names given to these objects when they were originally saved will be given to them when they are loaded. The command >  ls() can be used to print out all of the objects currently loaded into R.
+
+# https://higgi13425.github.io/medicaldata/reference/opt.html
+
+#     summary(data)
+```
+
+# Problem 1
+
+```{r}
+#| incldue: false
+#| results: hide
+#| 
+CreateTableOne(
+  data = data %>% select(-PID, -number_race, -Race_ethnicity), 
+  strata = "Group", 
+  vars = c("Preg.ended...37.wk", "Birth.outcome", 
+           setdiff(colnames(data), 
+                   c("Preg.ended...37.wk", "Birth.outcome", "Group")
+                   )
+           ), 
+  factorVars = c(
+    'Clinic', 'Black', 'White', 'Nat.Am', 'Asian', 'Hisp', 'Education',
+    'Public.Asstce', 'Hypertension', 'Diabetes', 'BL.Diab.Type', 'Use.Tob',
+    'Use.Alc', 'Drug.Add', 'Prev.preg', 'Live.PTB', 'pont.ab',  
+    'Induced.ab', 'Any.live.ptb.sb.sp.ab.in.ab', 'Birth.outcome' 
+  ),
+  
+  includeNA = T, 
+  test = F, 
+  smd = T
+  
+) -> table1
+
+print(table1, smd = TRUE, showAllLevels = F, varLabels = TRUE) -> table1_for_kable
+```
+
+
+```{r}
+#| label: tbl-table-one
+#| tbl-cap: "All Potentially Confounding Variables Stratified by Treatment Group" 
+table1_for_kable %>% 
+  kable(
+    booktabs = T,
+    longtable = TRUE
+    ) %>% 
+  kable_styling(
+    font_size = 7, 
+    latex_options = c("striped", "hover", "condensed", "HOLD_position")
+    ) %>% 
+  
+  add_indent(
+    c(8:11, 
+      18:20, 
+      29:31, 
+      34:36, 
+      39:41
+      ), level_of_indent = 1
+    )
+  
+
+```
+
+# Problem 2 
+
+Outcomes of Interest: reduction in the pre-term pregnancies
+
+Increase in the birthweight 
+
+Unadjusted ATE: difference in proportions between the two samples of treatment and control 
+
+```{r work to get unadjusted ATE for pregnancy reductions }
+# 
+# preg_df <- 
+#   data %>% 
+#   mutate(preg_37_end = 
+#            case_when(
+#              `Preg.ended...37.wk` == "Yes" ~ 1, 
+#              T ~ 0
+#            )) %>% 
+#   select(Group, preg_37_end)
+# 
+# preg_df %>% 
+#   group_by(Group) %>% 
+#   summarize(
+#     mean = mean(preg_37_end), 
+#     sd = sd(preg_37_end), 
+#     
+#     calc_sd = sqrt(mean(preg_37_end) * (1 - mean(preg_37_end)))
+#   )
+
+mean_trt = 
+  length(which(data$`Preg.ended...37.wk` == "Yes" & data$Group == "T"))/ 
+  length(which(data$Group == "T"))
+
+se_mean_trt = sqrt(mean_trt * (1 - mean_trt)/length(which(data$Group == "T")))
+
+
+mean_c = 
+  length(which(data$`Preg.ended...37.wk` == "Yes" & data$Group == "C"))/ 
+  length(which(data$Group == "C"))
+
+se_mean_c = sqrt(mean_c * (1 - mean_c)/length(which(data$Group == "C")))
+
+diff = mean_c - mean_trt
+pooled_se_diff = sqrt(se_mean_c ^ 2 + se_mean_trt ^ 2)
+
+test = (diff - 0)/pooled_c_diff
+
+
+
+```
+
+```{r work to get unadjusted ATE for birthweight increase }
+
+
+data %>% 
+  group_by(Group) %>% 
+  summarise(
+    nas = sum(is.na(Birthweight)), 
+    mean = mean(Birthweight, na.rm = T), 
+    se = sd(Birthweight, na.rm = T)/sqrt(n())
+  ) %>% 
+  ungroup() -> summ_stats
+
+mean_c <- summ_stats %>% filter(Group == "C") %>% select(mean) %>% unlist()
+mean_trt <- summ_stats %>% filter(Group == "T") %>% select(mean) %>% unlist()
+
+se_mean_c <- summ_stats %>% filter(Group == "C") %>% select(se) %>% unlist()
+se_mean_trt <- summ_stats %>% filter(Group == "T") %>% select(se) %>% unlist()
+
+diff = mean_trt - mean_c
+
+pooled_se_diff = sqrt(se_mean_c ^ 2 + se_mean_trt ^ 2)
+
+test = (diff - 0)/pooled_se_diff
+
+```
+
+# Problem 3 
+
+```{r prepare modeling data for problem 3}
+
+modeling_data <- 
+  data %>% 
+  mutate(Race_ethnicity = as.factor(Race_ethnicity)) %>% 
+  select(
+    `Preg.ended...37.wk` , Birthweight, 
+      Group , Race_ethnicity , Public.Asstce , Use.Tob , N.prev.preg , Live.PTB , BL.GE , BL..BOP , BL..PD.4 , BL..CAL.3
+  )
+
+summary(modeling_data)
+
+# impute Race_ethnicity, Use.Tob with the most common value 
+
+# impute Birthweight, N.prev.preg with median values 
+
+modeling_data[is.na(modeling_data$Birthweight), ]$Birthweight <- median(modeling_data$Birthweight, na.rm = T)
+modeling_data[is.na(modeling_data$N.prev.preg), ]$N.prev.preg <- median(modeling_data$N.prev.preg, na.rm = T)
+
+modeling_data[is.na(modeling_data$Race_ethnicity), ]$Race_ethnicity <- names(which.max(table(modeling_data$Race_ethnicity)))
+modeling_data[is.na(modeling_data$Use.Tob), ]$Use.Tob <- names(which.max(table(modeling_data$Use.Tob)))
+
+
+```
+
+
+```{r regression model for pregnancy }
+
+pregnancy_model <- 
+  glm(
+    `Preg.ended...37.wk` ~ 
+      Group + Race_ethnicity + Public.Asstce + Use.Tob + N.prev.preg + Live.PTB + BL.GE + BL..BOP + BL..PD.4 + BL..CAL.3, 
+    
+    data = data, 
+    family = "binomial"
+  )
+```
+
+```{r create data for potential outcomes pregnancy }
+
+all_no_treat <- data %>% 
+  select(-Group) %>% 
+  mutate(Group = "C")
+
+all_no_treat$porential_no_trt <- predict(pregnancy_model, all_no_treat , type = "response")
+
+all_treat <- data %>% 
+  select(-Group) %>% 
+  mutate(Group = "T")
+
+all_treat$porential_trt <- predict(pregnancy_model, all_treat , type = "response")
+
+```
+
+```{r estimating tretment effect for pregnancy outcome}
+
+mean(all_treat$porential_trt, na.rm = T) - mean(all_no_treat$porential_no_trt, na.rm = T)
+```
+
+```{r boostrap standard error for pregnancy ATE}
+
+K = 500
+
+ates <- 
+  data.frame(
+    i = seq(from = 1, to = K, by = 1)
+  ) %>% 
+  mutate(ate = NA)
+
+set.seed(976786)
+for(i in 1:K){
+  
+  iter_data = data[sample(1:nrow(data), replace = T), ]
+  
+  iter_pregnancy_model <- 
+    glm(
+      `Preg.ended...37.wk` ~ 
+        Group + Race_ethnicity + Public.Asstce + Use.Tob + N.prev.preg + Live.PTB + BL.GE + BL..BOP + BL..PD.4 + BL..CAL.3, 
+      
+      data = iter_data, 
+      family = "binomial"
+    )
+  
+  iter_data_all_c = iter_data %>% 
+    select(-Group) %>% 
+    mutate(Group = "C")
+  
+  iter_data_all_c$porential_no_trt <- predict(iter_pregnancy_model, iter_data_all_c , type = "response")
+
+  iter_data_all_trt = iter_data %>% 
+    select(-Group) %>% 
+    mutate(Group = "T")
+  
+  iter_data_all_trt$porential_trt <- predict(iter_pregnancy_model, iter_data_all_trt , type = "response")
+    
+  iter_ate = mean(iter_data_all_trt$porential_trt, na.rm = T) - mean(iter_data_all_c$porential_no_trt, na.rm = T)
+  
+  ates$ate[i] = iter_ate
+}
+
+write_csv(ates, "pregnancy ate bootsrap.csv")
+```
+
+```{r adjusted ate for pregnancy}
+
+ates <- read_csv("pregnancy ate bootsrap.csv") 
+
+```
+
+
+```{r regression model for birthweight }
+
+borthweight_model <- 
+  lm(
+    Birthweight ~ 
+    (Group + Race_ethnicity + Public.Asstce + Use.Tob + N.prev.preg + Live.PTB + BL.GE + BL..BOP + BL..PD.4 + BL..CAL.3)^2, 
+    
+    data = data
+
+  )
+```
+
+
+```{r create data for potential outcomes birthweight }
+
+all_no_treat <- data %>% 
+  select(-Group) %>% 
+  mutate(Group = "C")
+
+all_no_treat$porential_no_trt <- predict(borthweight_model, all_no_treat , type = "response")
+
+all_treat <- data %>% 
+  select(-Group) %>% 
+  mutate(Group = "T")
+
+all_treat$porential_trt <- predict(borthweight_model, all_treat , type = "response")
+
+```
+
+```{r estimating tretment effect for birthweight outcome}
+
+mean(all_treat$porential_trt, na.rm = T) - mean(all_no_treat$porential_no_trt, na.rm = T)
+```
+
+```{r boostrap standard error for birthweight ATE}
+
+K = 500
+
+ates <- 
+  data.frame(
+    i = seq(from = 1, to = K, by = 1)
+  ) %>% 
+  mutate(ate = NA)
+
+set.seed(9766786)
+for(i in 1:K){
+  
+  iter_data = data[sample(1:nrow(data), replace = T), ]
+  
+  iter_birthweight_model <- 
+      lm(
+        Birthweight ~ 
+        (Group + Race_ethnicity + Public.Asstce + Use.Tob + N.prev.preg + Live.PTB + BL.GE + BL..BOP + BL..PD.4 + BL..CAL.3)^2, 
+        
+        data = data
+    
+      )
+  
+  iter_data_all_c = iter_data %>% 
+    select(-Group) %>% 
+    mutate(Group = "C")
+  
+  iter_data_all_c$porential_no_trt <- predict(iter_birthweight_model, iter_data_all_c , type = "response")
+
+  iter_data_all_trt = iter_data %>% 
+    select(-Group) %>% 
+    mutate(Group = "T")
+  
+  iter_data_all_trt$porential_trt <- predict(iter_birthweight_model, iter_data_all_trt , type = "response")
+    
+  iter_ate = mean(iter_data_all_trt$porential_trt, na.rm = T) - mean(iter_data_all_c$porential_no_trt, na.rm = T)
+  
+  ates$ate[i] = iter_ate
+}
+
+write_csv(ates, "birthweight ate bootsrap.csv")
+```
+
+```{r adjusted ate for birthweight}
+
+ates <- read_csv("birthweight ate bootsrap.csv") 
+
+```
