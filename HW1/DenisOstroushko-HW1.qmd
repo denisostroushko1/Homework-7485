@@ -34,13 +34,24 @@ data1 <- load("OPT_Study_PUBH7485_8485_2023.Rdata")
 #| results: hide
 
 data_tbl_1 = data %>% select(-PID, -number_race, -Race_ethnicity)
+# 
+# view_col = 
+#   data.frame(
+#     df_cols = colnames(data_tbl_1) 
+#   ) %>% 
+#   mutate(
+#     pretty_col = 
+#       case_when(
+#         
+#       )
+#   )
 
 CreateTableOne(
   data = data_tbl_1, 
   strata = "Group", 
-  vars = c("Preg.ended...37.wk", "Birth.outcome", 
+  vars = c("Preg.ended...37.wk", "Birthweight", 
            setdiff(colnames(data), 
-                   c("Preg.ended...37.wk", "Birth.outcome", "Group")
+                   c("Preg.ended...37.wk", "Birthweight", "Group")
                    )
            ), 
   factorVars = c(
@@ -97,6 +108,11 @@ table1_for_kable %>%
 
 # Problem 2 
 
+For the purpose of this problem, we need to impute categorical variables with mode values, and continuous variables with 
+medians. 
+
+I identified `Birthweight`, `N.prev.preg`, `Race_ethnicity`, and `Use.Tob` as variables that are subject to imputation. 
+
 
 ```{r prepare modeling data for problem 3}
 
@@ -152,7 +168,7 @@ test = (diff - 0)/pooled_se_diff
   
   *   Treatment group experienced `r round(mean_trt, 3)*100`% of pre-term pregnancies
   
-  *   Average Treatment Effect is the difference between two means, which is `r round(diff, 3)*100`%
+  *   Average Treatment Effect is the difference between two means, which is `r round(diff, 3)*100`
   
   *   Variance of the difference for two independent random variables is the sum of their variances, which works out to be 
     `r round(pooled_se_diff^2, 6)`. Therefore, standard error for the test is `r round(pooled_se_diff, 4)`
@@ -179,7 +195,7 @@ test = (diff - 0)/pooled_se_diff
 
 ```{r work to get unadjusted ATE for birthweight increase }
 
-data %>% 
+modeling_data %>% 
   group_by(Group) %>% 
   summarise(
     nas = sum(is.na(Birthweight)), 
@@ -209,7 +225,7 @@ test = (diff - 0)/pooled_se_diff
   
   *   Treatment group showed average birthweight of  `r round(mean_trt, 1)`
   
-  *   Average Treatment Effect is the difference between two means, which is `r round(diff, 1)`%
+  *   Average Treatment Effect is the difference between two means, which is `r round(diff, 1)`
   
   *   Variance of the difference for two independent random variables is the sum of their variances, which works out to be 
     `r round(pooled_se_diff^2, 2)`. Therefore, standard error for the test is `r round(pooled_se_diff, 2)`
@@ -248,20 +264,20 @@ pregnancy_model <-
       Group + Race_ethnicity + Public.Asstce + Use.Tob + N.prev.preg + 
       Live.PTB + BL.GE + BL..BOP + BL..PD.4 + BL..CAL.3, 
     
-    data = data, 
+    data = modeling_data, 
     family = "binomial"
   )
 ```
 
 ```{r create data for potential outcomes pregnancy }
 
-all_no_treat <- data %>% 
+all_no_treat <- modeling_data %>% 
   select(-Group) %>% 
   mutate(Group = "C")
 
 all_no_treat$porential_no_trt <- predict(pregnancy_model, all_no_treat , type = "response")
 
-all_treat <- data %>% 
+all_treat <- modeling_data %>% 
   select(-Group) %>% 
   mutate(Group = "T")
 
@@ -295,7 +311,7 @@ ates <-
 set.seed(976786)
 for(i in 1:K){
   
-  iter_data = data[sample(1:nrow(data), replace = T), ]
+  iter_data = modeling_data[sample(1:nrow(modeling_data), replace = T), ]
   
   iter_pregnancy_model <- 
     glm(
@@ -356,21 +372,19 @@ borthweight_model <-
               N.prev.preg + Live.PTB + BL.GE + BL..BOP + 
               BL..PD.4 + BL..CAL.3), 
     
-    data = data
+    data = modeling_data
   )
-
 ```
-
 
 ```{r create data for potential outcomes birthweight }
 
-all_no_treat <- data %>% 
+all_no_treat <- modeling_data %>% 
   select(-Group) %>% 
   mutate(Group = "C")
 
 all_no_treat$porential_no_trt <- predict(borthweight_model, all_no_treat , type = "response")
 
-all_treat <- data %>% 
+all_treat <- modeling_data %>% 
   select(-Group) %>% 
   mutate(Group = "T")
 
@@ -401,12 +415,15 @@ ates <-
 set.seed(9766786)
 for(i in 1:K){
   
-  iter_data = data[sample(1:nrow(data), replace = T), ]
+  if(i %% 100 == 0){paste("ON", i)}
+  
+  iter_data = modeling_data[sample(1:nrow(modeling_data), replace = T), ]
   
   iter_birthweight_model <- 
       lm(
          Birthweight ~ 
-            Group *(Race_ethnicity + Public.Asstce + Use.Tob + N.prev.preg + Live.PTB + BL.GE + BL..BOP + BL..PD.4 + BL..CAL.3), 
+              Group *(Race_ethnicity + Public.Asstce + Use.Tob + 
+                        N.prev.preg + Live.PTB + BL.GE + BL..BOP + BL..PD.4 + BL..CAL.3), 
     
         data = iter_data
     
@@ -433,6 +450,7 @@ write_csv(ates, "birthweight ate bootsrap.csv")
 ```
 
 ```{r adjusted ate for birthweight}
+
 ates <- read_csv("birthweight ate bootsrap.csv") 
 
 ```
