@@ -786,15 +786,19 @@ Therefore, it may be the case that a simple linear model with no interactions or
 model the treatment allocation. 
 
 Also, it is likely that IPW2 method can handle outliers or extreme values better, and the effect of these values is not 
-as strong within the bootsrap replications. 
+as strong within the bootstrap replications. 
 
-@fig-ates-bw shows that IPW2 method of estimation of causal effect produces an estimate with the lowest variance. 
-Regression Adjustment and Propensity Score Stratification methods produce very similar estimates. 
+However, the fact the IPW2 disagrees with a non parametric methods (PSS) and a regression based approach makes me think that 
+we specified the models and omitted either important interaction terms when modeling propensity scores, or we 
+omitted some potentially important covariates/confounders. 
 
 **Birth weight results**
 
 @fig-ates-bw shows that all three estimates have the same point estimates and same variance, as expressed by their confidence 
 intervals. It appears that the data we have is not sensitive to estimation method. 
+
+Agreement of the three methods in terms of point estimates and variance estimates makes me more convinced that we made 
+the rihgt choices when it came to model specification for both treatment selection and outcome modeling. 
 
 ```{r}
 #| label: fig-ates-preg
