@@ -177,15 +177,19 @@ Variables = c(
      "N.prev.preg", "BL.GE", "BL..BOP", "BL..PD.4", "BL..CAL.3"
   )
 
-FactorVariables =  c(
-    "Race_ethnicity", "Public.Asstce", "Use.Tob"
+other_vars <- 
+  setdiff(
+    colnames(data2),
+    Variables
   )
+
+
+### also apparently David wants the whole table here. So we need to include all vairables 
 
 CreateTableOne(
   data = data, 
   strata = "Group", 
-  vars = Variables, 
-  factorVars = FactorVariables, 
+  vars = c(Variables, other_vars), 
   test = F, 
   smd = T
 ) -> raw_table_1
@@ -196,17 +200,19 @@ ExtractSmd(raw_table_1) ->  raw_SMD
 
 data$num_treat_flag <- ifelse(data$Group == "C", 1, 0)
 
+trt = ifelse(data$Group == "T", 1, 0)
+
+###
 ### A ### 
-p_a = predict(logistic_regression_a, data, type = "response")
 # weight is TRT/PS + (1-TRT)/(1-PS)
-weight_a <- data$num_treat_flag/p_a + (1 - data$num_treat_flag)/(1- p_a) 
+ps_a = logistic_regression_a$fitted.values
+weight_a <- trt/ps_a + (1 - trt)/(1- ps_a) 
 data_a <- svydesign(ids = ~ 1, data = data, weights = ~ weight_a)
 
 
 tabWeighted_a <- 
   svyCreateTableOne(
-    vars = Variables, 
-    factorVars = FactorVariables, 
+    vars = c(Variables, other_vars), 
     strata = "Group",
     data = data_a, 
     test = FALSE, 
@@ -216,15 +222,14 @@ tabWeighted_a <-
 ExtractSmd(tabWeighted_a) ->  SMD_a
 
 ### B ### 
-p_b = predict(logistic_regression_b, data, type = "response")
-weight_b <- data$num_treat_flag/p_b + (1 - data$num_treat_flag)/(1- p_b) 
+ps_b = logistic_regression_b$fitted.values
+weight_b <- trt/ps_b + (1 - trt)/(1- ps_b) 
 data_b <- svydesign(ids = ~ 1, data = data, weights = ~ weight_b)
 
 
 tabWeighted_b <- 
   svyCreateTableOne(
-    vars = Variables, 
-    factorVars = FactorVariables, 
+    vars = c(Variables, other_vars), 
     strata = "Group",
     data = data_b, 
     test = FALSE, 
@@ -235,14 +240,13 @@ ExtractSmd(tabWeighted_b) ->  SMD_b
 
 ### C ### 
 p_c = predict(logistic_regression_c, data, type = "response")
-weight_c <- data$num_treat_flag/p_c + (1 - data$num_treat_flag)/(1- p_c) 
+weight_c <- trt/p_c + (1 - trt)/(1- p_c) 
 data_c <- svydesign(ids = ~ 1, data = data, weights = ~ weight_c)
 
 
 tabWeighted_c <- 
   svyCreateTableOne(
-    vars = Variables, 
-    factorVars = FactorVariables, 
+    vars = c(Variables, other_vars), 
     strata = "Group",
     data = data_c, 
     test = FALSE, 
@@ -252,15 +256,14 @@ tabWeighted_c <-
 ExtractSmd(tabWeighted_c) ->  SMD_c
 
 ### D ### 
-p_d = predict(logistic_regression_d, data, type = "response")
-weight_d <- data$num_treat_flag/p_d + (1 - data$num_treat_flag)/(1- p_d)
+p_d = logistic_regression_d$fitted.values
+weight_d <- trt/p_d + (1 - trt)/(1- p_d)
 data_d <- svydesign(ids = ~ 1, data = data, weights = ~ weight_d)
 
 
 tabWeighted_d <- 
   svyCreateTableOne(
-    vars = Variables, 
-    factorVars = FactorVariables, 
+    vars = c(Variables, other_vars), 
     strata = "Group",
     data = data_d, 
     test = FALSE, 
@@ -271,14 +274,13 @@ ExtractSmd(tabWeighted_d) ->  SMD_d
 
 ### RF ### 
 p_e = rf$votes[,2]
-weight_e <- I(data$Group == "C")/p_e + I(data$Group == "T")/(1- p_e)
+weight_e <- trt/p_e + (1 - trt)/(1- p_e)
 data_e <- svydesign(ids = ~ 1, data = data, weights = ~ weight_e)
 
 
 tabWeighted_rf <- 
   svyCreateTableOne(
-    vars = Variables, 
-    factorVars = FactorVariables, 
+    vars = c(Variables, other_vars), 
     strata = "Group",
     data = data_e, 
     test = FALSE, 
@@ -287,7 +289,7 @@ tabWeighted_rf <-
 
 ExtractSmd(tabWeighted_rf) ->  SMD_e
 
-#### ALL ##### 
+#### ALL #####
 
 all_SMDs = 
   rbind(
@@ -297,7 +299,11 @@ all_SMDs =
     data.frame(SMD_b) %>% mutate(type = "Logistic Regression B", variable = rownames(.)),
     data.frame(SMD_a) %>% mutate(type = "Logistic Regression A", variable = rownames(.)),
     data.frame(raw_SMD) %>% mutate(type = "Unadjusted", variable = rownames(.))
-  ) 
+  )  %>% 
+  mutate(
+    variable = factor(variable, 
+                      levels = c(Variables, other_vars))
+  )
 ```
 
 ```{r}
@@ -311,7 +317,8 @@ ggplot(data = all_SMDs,
   theme_classic() + 
   scale_x_discrete(name = "") + 
   geom_hline(yintercept = 0) + 
-  geom_hline(color = "red", linetype = "dashed", yintercept = 0.1) + 
+  geom_vline(xintercept = 9, color = "blue", linetype = "dashed", size = 2, alpha = 0.5) + # this should be something minus 9  
+  geom_hline(color = "red", linetype = "dashed", yintercept = 0.1, size = 2, alpha = 0.5) + 
   theme(
     legend.position = "bottom"
   ) +
