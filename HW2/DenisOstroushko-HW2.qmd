@@ -386,7 +386,7 @@ for(i in 1:500){
     iter_propensity_score_model$fitted.values # vector of corresponding propensity scores 
   
   iter_w_cnt = 
-    (1 - ifelse(iter_data$Group == "C", 1, 0))/ # vector that identifies '0's as '1's
+    (1 - ifelse(iter_data$Group == "T", 1, 0))/ # vector that identifies '0's as '1's
     (1-iter_propensity_score_model$fitted.values)
   
   weighted.mean(ifelse(iter_data$Preg.ended...37.wk == "Yes", 1, 0), iter_w_trt) - 

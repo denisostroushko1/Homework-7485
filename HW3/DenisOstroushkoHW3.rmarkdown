@@ -9,7 +9,6 @@ execute:
   message: false
 ---
 
-
 ```{r read packages }
 total_nchar = nchar(getwd())
 remove_nchar = nchar("HW1")
@@ -26,6 +25,7 @@ data1 <- load("OPT_Study_PUBH7485_8485_2023.Rdata")
 
 #     summary(data)
 ```
+
 
 # Introduction 
 
@@ -44,6 +44,7 @@ Variables `BMI`, `BL.Cig.Day`, `BL.Drks.Day`, `N.living.kids` are imputed with m
 the previous assignments. 
 
 `Use.Alc`  is imputed with a mode like `Race_ethnicity`, `Use.Tob`
+
 
 ```{r imputation and data set preparation }
 ## imputation 
@@ -93,11 +94,13 @@ data <-
 
 ```
 
+
 # Problem 1
 
 Instead of writing equations for each model, I provide formatted coke chunks that contain model statements. 
 
 ### Logistic regression - A
+
 
 ```{r train all models -A }
 #| echo: true
@@ -115,9 +118,11 @@ logistic_regression_a <-
   )
 ```
 
+
 ### Logistic regression - B
 
 For these non-linear terms, I selected polynomial degrees that minimize AIC, to some reasonable degree. 
+
 
 ```{r train model B }
 #| echo: true 
@@ -139,11 +144,13 @@ logistic_regression_b <-
   )
 ```
 
+
 ### Logistic Regresson - C
 
 I decided to use forward selection. After a few trials I determined that forward variable selection includes less variables 
 into the final output, while providing similar AIC. Also, when I compared SMD balance, forward stepping variable selection 
 resulted in smaller SMD of the balanced covariates sets. 
+
 
 ```{r train model c}
 #| echo: true 
@@ -175,7 +182,9 @@ logistic_regression_c <-
 
 ```
 
+
 ### Logistic Regression - D
+
 
 ```{r train model d}
 #| echo: true 
@@ -205,7 +214,9 @@ logistic_regression_d <-
     )
 ```
 
+
 ### Flexible Regression - Random Forest 
+
 
 ```{r train model e}
 #| echo: true 
@@ -365,6 +376,7 @@ all_SMDs =
   )
 ```
 
+
 Having obtained five sets of propensity scores, we can created five sets of weighted SMDs for all covariates, i.e. potential 
 confounders. We contrast five sets of SMDs and weighted SMD on @fig-smds. 
 
@@ -378,6 +390,7 @@ vertical blue line.
 
 Lastly, due to some fitted probabilities being equal to 1 or 0, I replace these extreme values with numbers that are close 
 to them. For 0, the replacement is `0.1 * 10^-15`, while for 1 the replacement is `1 - 0.1*10^-15`. 
+
 
 ```{r SMD plot}
 #| label: fig-smds
@@ -401,6 +414,7 @@ ggplot(data = all_SMDs,
 
 ```
 
+
 \newpage 
 
 # Part B
@@ -408,6 +422,7 @@ ggplot(data = all_SMDs,
 In order to estimate Treatment Effect using a doubly robust, I will propensity scores from logistic regression specified in 
 part A. Additionally, I specify two outcome models, one for each outcome of interest. Definition of two models are given 
 in the code chunks below: 
+
 
 ```{r}
 #| echo: true
@@ -432,12 +447,14 @@ borthweight_model <-
   )
 ```
 
+
 We consider less flexible regression methods in order to allow a higher chance at specifying at least one model for 
 the doubly robust estimator. We wish to observe that a point estimate for ATE will be consistent with IPW2, but will 
 have a smaller bootstrapped SE. My code for obtaining 500 bootstrap iterations is given in an appendix. 
 
 My code for calculating ATE using AIPW is given below. I am giving a step by step estimation of ATE for both outcomes 
 variables, and will comment of the results one at a time. 
+
 
 ```{r all ate calculations }
 #| echo: true
@@ -485,6 +502,7 @@ trt_ind = ifelse(data$Group == "T", 1, 0)
 aipw_res <- read_csv("Augment IPW bootstrap results.csv")
 ```
 
+
 ## Pre-term pregnancy AIPW 
 
 * Pre-term pregnancy rate reduction estimate is `r round(AIPW_preg_ate, 2)`, suggesting that the program was responsible 
@@ -505,6 +523,7 @@ for a `r round(AIPW_preg_ate, 2)*100`% reduction in the rates of pre-term pregna
 \newpage 
 
 ## Pre-term pregnancies: comparison with previous results 
+
 
 ```{r import all old ATE standard error results}
 
@@ -552,9 +571,11 @@ ggplot(data = preg_effects,
 
 ```
 
+
 \newpage 
 
 ## Birth weights: comparison with previous results 
+
 
 ```{r}
 
@@ -602,9 +623,11 @@ ggplot(data = bw_effects,
 
 ```
 
+
 \newpage 
 
 # Appendix: bootsrap code 
+
 
 
 ```{r bootsrap SMD standard error }
