@@ -551,8 +551,7 @@ ggplot(data = preg_effects,
   ggtitle("Comaprison of Three Estiamtion Methods on Average \n Treatment Effect for Pre-Term Pregnancy Reduction Rates")
 
 ```
-
-\newpage 
+\newpage  
 
 ## Birth weights: comparison with previous results 
 
