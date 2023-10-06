@@ -506,6 +506,15 @@ for a `r round(AIPW_preg_ate, 2)*100`% reduction in the rates of pre-term pregna
 
 ## Pre-term pregnancies: comparison with previous results 
 
+@fig-preg-ates shows that the variance of all estimators we have considered over the past few weeks. We observe that the 
+variance of Augmented IPW is similar to the IPW2 estimator we considered in the previous assignment. This means that the 
+outcome model was not correctly specified. This tells us that we have either omitted important predictors, or we did not
+consider a correct amount of non-linear or interaction terms to model the likelihood of pre-term pregnancies. 
+
+We also observe that the point estimate matches previous results, showing that the estimator is consistent if we 
+specify just one of the two models. We have high confidence that a glm for pregnancy outcome was misspecified, which means 
+that the propensity score model is likely correctly specified. 
+
 ```{r import all old ATE standard error results}
 
 preg_ates_hw1 <- read_csv("/Users/denisostroushko/Desktop/UofM MS/MS 2023 - 2 Fall/PUBH 7485/Homework-7485/HW1/pregnancy ate bootsrap.csv")
@@ -576,6 +585,9 @@ bw_effects <-
   )
 
 ```
+
+@fig-bw-ates shows that we likely have the same issue with the AIPW estimator for the birth weights ATE. Variance being 
+similar to IPW2 suggests that the model for the average birth weights was misspecified. 
 
 ```{r pregnancy ipw comparisons}
 #| label: fig-bw-ates
@@ -663,8 +675,8 @@ for(i in 1:K){
   
   iter_data_1 <- iter_data_0 <- iter_data
   
-  iter_data_1$Group = "T"
-  iter_data_0$Group = "C"
+  iter_data_1$Group = as.factor("T")
+  iter_data_0$Group = as.factor("C")
   
   preg_y_1 = predict(object = iter_pregnancy_model, newdata = iter_data_1, type = "response")
   preg_y_0 = predict(object = iter_pregnancy_model, newdata = iter_data_0, type = "response")
@@ -701,5 +713,16 @@ for(i in 1:K){
 }
 
 write.csv(res, "Augment IPW bootstrap results.csv")
+
+```
+
+```{r}
+#| eval: false 
+
+mean(res$AIPW_preg_ate)
+mean(res$AIPW_preg_ate2)
+
+sd(res$AIPW_preg_ate)
+sd(res$AIPW_preg_ate2)
 
 ```
