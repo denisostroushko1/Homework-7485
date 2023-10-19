@@ -1,0 +1,917 @@
+---
+title: "Denis Ostroushko - HW4"
+format: 
+  pdf:
+    toc: false
+execute: 
+  echo: false
+  warning: false
+  message: false
+---
+
+
+```{r read packages }
+total_nchar = nchar(getwd())
+remove_nchar = nchar("HW1")
+path = substr(getwd(), 1, total_nchar - remove_nchar)
+source(paste0(path,"Master Packages.R"))
+```
+
+```{r read in data}
+data1 <- load("OPT_Study_PUBH7485_8485_2023.Rdata")
+
+# Notice that the result of this function is not assigned to an object name. When R calls load(), all of the R objects saved in the file are loaded into R. The names given to these objects when they were originally saved will be given to them when they are loaded. The command >  ls() can be used to print out all of the objects currently loaded into R.
+
+# https://higgi13425.github.io/medicaldata/reference/opt.html
+
+#     summary(data)
+```
+
+# Introduction 
+
+### Imputation and Variable Processing 
+
+For the purpose of this assignment we retain the same imputation schemes we used in the previous two assignments. 
+We will use imputation with the median of observed values and replace missing values with modes for categorical predictors. 
+
+Since we will need to create two models that have all possible confounders in the data set, we need to be careful with 
+variable inclusion. We drop variable `Hisp` because it is highly correlated with other variables that contain race and 
+ethnic information. We also `Drug.Add` due to the issues with its imputation. When imputed with the most common level 
+"No", which indicated no drug use, this variable has one unique level. Such zero variance predictors can cause problems 
+with fitting models, so we will avoid using it in our analyses. 
+
+Variables `BMI`, `BL.Cig.Day`, `BL.Drks.Day`, `N.living.kids` are imputed with medians like `N.prev.preg`, `Birthweight` in 
+the previous assignments. 
+
+`Use.Alc`  is imputed with a mode like `Race_ethnicity`, `Use.Tob`
+
+```{r imputation and data set preparation }
+## imputation 
+
+median_bw <- median(data$Birthweight, na.rm = T)
+median_npp <- median(data$N.prev.preg, na.rm = T)
+median_bmi <- median(data$BMI, na.rm = T)
+median_bl_cig <- median(data$BL.Cig.Day, na.rm = T)
+median_bl_drinks <- median(data$BL.Drks.Day, na.rm = T)
+median_kids <- median(data$N.living.kids, na.rm = T)
+
+# mode_drug <- 
+#   names(
+#     (table(data$Drug.Add) %>% sort())[length(table(data$Drug.Add))]
+#     )
+
+mode_alc <- 
+  names(
+    (table(data$Use.Alc) %>% sort())[length(table(data$Use.Alc))]
+    )
+
+mode_race <- 
+  names(
+    (table(data$Race_ethnicity) %>% sort())[length(table(data$Race_ethnicity))]
+    )
+
+mode_tob <- 
+  as.character(names(
+    (table(data$Use.Tob) %>% sort())[length(table(data$Use.Tob))]
+    ))
+
+data[is.na(data$Race_ethnicity), ]$Race_ethnicity <- mode_race
+data[is.na(data$Use.Tob), ]$Use.Tob <- mode_tob
+data[is.na(data$N.prev.preg), ]$N.prev.preg <- median_npp
+data[is.na(data$Birthweight), ]$Birthweight <- median_bw
+data[is.na(data$BMI), ]$BMI <- median_bmi
+data[is.na(data$BL.Cig.Day), ]$BL.Cig.Day <- median_bl_cig
+data[is.na(data$BL.Drks.Day), ]$BL.Drks.Day <- median_bl_drinks
+data[is.na(data$N.living.kids), ]$N.living.kids <- median_kids
+# data[is.na(data$Drug.Add), ]$Drug.Add <- mode_drug
+data[is.na(data$Use.Alc), ]$Use.Alc <- mode_alc
+
+
+data <- 
+  data %>% 
+  select(-Hisp, - Drug.Add)
+
+```
+
+# Problem 1
+
+## 1 - A
+
+```{r regression adjustment for pregnancy  }
+#| echo: true
+pregnancy_model <- 
+  glm(
+    `Preg.ended...37.wk` ~ 
+      Group + Race_ethnicity + Public.Asstce + Use.Tob + N.prev.preg + 
+      Live.PTB + BL.GE + BL..BOP + BL..PD.4 + BL..CAL.3, 
+    
+    data = data, 
+    family = "binomial"
+  )
+
+all_no_treat <- data %>% 
+  filter(Group == "T") %>% 
+  select(-Group) %>% 
+  mutate(Group = "C")
+
+all_no_treat$porential_no_trt <- predict(pregnancy_model, all_no_treat , type = "response")
+
+all_treat <- data %>% 
+  filter(Group == "T") %>% 
+  select(-Group) %>% 
+  mutate(Group = "T")
+
+all_treat$porential_trt <- predict(pregnancy_model, all_treat , type = "response")
+
+preg_att <- mean(all_treat$porential_trt, na.rm = T) - mean(all_no_treat$porential_no_trt, na.rm = T) 
+
+print("Regression ATT Pregnancy")
+preg_att
+
+```
+
+```{r regression adjustment for borthweight }
+
+borthweight_model <- 
+  lm(
+    Birthweight ~ 
+    Group *(Race_ethnicity + Public.Asstce + Use.Tob + 
+              N.prev.preg + Live.PTB + BL.GE + BL..BOP + 
+              BL..PD.4 + BL..CAL.3), 
+    
+    data = data
+  )
+
+
+all_no_treat <- data %>% 
+  filter(Group == "T") %>% 
+  select(-Group) %>% 
+  mutate(Group = "C")
+
+all_no_treat$porential_no_trt <- predict(borthweight_model, all_no_treat , type = "response")
+
+all_treat <- data %>% 
+  filter(Group == "T") %>% 
+  select(-Group) %>% 
+  mutate(Group = "T")
+
+all_treat$porential_trt <- predict(borthweight_model, all_treat , type = "response")
+
+bwt_att <- mean(all_treat$porential_trt, na.rm = T) - mean(all_no_treat$porential_no_trt, na.rm = T) 
+
+print("Regression ATT Birthweight")
+bwt_att
+
+
+
+```
+
+# 1 - B 
+
+```{r propensity score model}
+
+propensity_score_model <- glm(
+  
+  I(data$Group == "T") %>% as.numeric() ~ 
+    Race_ethnicity + Public.Asstce +
+    Use.Tob + N.prev.preg + Live.PTB + 
+    BL.GE + BL..BOP + BL..PD.4 + BL..CAL.3, 
+  
+  data = data, 
+  family = "binomial"
+)
+
+data$propensity_scores <- propensity_score_model$fitted.values
+
+```
+
+```{r pregnancy propensity score + trt regression }
+
+# simple model has the smallest AIC 
+preg_prop_regression <- 
+  glm(`Preg.ended...37.wk` ~ Group*propensity_scores, data = data, family = "binomial")
+
+
+all_no_treat <- data %>% 
+  filter(Group == "T") %>% 
+  select(-Group) %>% 
+  mutate(Group = "C")
+
+all_no_treat$porential_no_trt <- predict(preg_prop_regression, all_no_treat , type = "response")
+
+all_treat <- data %>% 
+  filter(Group == "T") %>% 
+  select(-Group) %>% 
+  mutate(Group = "T")
+
+all_treat$porential_trt <- predict(preg_prop_regression, all_treat , type = "response")
+
+preg_att_psr <- mean(all_treat$porential_trt, na.rm = T) - mean(all_no_treat$porential_no_trt, na.rm = T) 
+
+print("PSR ATT Pregnancy")
+preg_att_psr
+
+```
+
+```{r borthweight propensity score + trt regression }
+
+# simple model has the smallest AIC 
+bw_prop_regression <- 
+  lm(Birthweight ~ Group*propensity_scores, data = data)
+
+all_no_treat <- data %>% 
+  filter(Group == "T") %>% 
+  select(-Group) %>% 
+  mutate(Group = "C")
+
+all_no_treat$porential_no_trt <- predict(bw_prop_regression, all_no_treat , type = "response")
+
+all_treat <- data %>% 
+  filter(Group == "T") %>% 
+  select(-Group) %>% 
+  mutate(Group = "T")
+
+all_treat$porential_trt <- predict(bw_prop_regression, all_treat , type = "response")
+
+bw_att_psr <- mean(all_treat$porential_trt, na.rm = T) - mean(all_no_treat$porential_no_trt, na.rm = T) 
+
+print("PSR ATT Borthweight")
+bw_att_psr
+```
+
+# 1 - C
+
+```{r pregnancy - propensity score stratification }
+
+# so for ATT using PRS we need to use quintiles cutoffs of controls, and apply them to the treated: Why? 
+
+ps_quintile <- 
+  cut(data$propensity_scores, 
+      breaks = c(0, 
+                 quantile(data[data$Group == "T", ]$propensity_score, p = c(0.2, 0.4, 0.6, 0.8)), 
+                 1), 
+      labels = 1:5)
+
+nA <- nrow(data[data$Group == "T", ])
+nAj <- table(ps_quintile[data$Group == "T"])
+
+te_quintile <- 
+  
+  tapply(ifelse(data$`Preg.ended...37.wk`[data$Group == "T"] == "Yes",1,0),  ## outcomes in the treated gorup 
+         ps_quintile[data$Group == "T"], ## quintiles in the treated group 
+         mean) -  # apply mean within each quintile: get proportion of yeses in each stratum 
+  
+	tapply(ifelse(data$`Preg.ended...37.wk`[data$Group == "C"] == "Yes",1,0),  # outcomes for controls only 
+	       ps_quintile[data$Group == "C"],   # average outcomes for controls within quintiles as defined by treated 
+	       mean)
+
+preg_pss_att <- sum(te_quintile *nAj/nA)
+
+print("PSS ATT Pregnancy")
+preg_pss_att
+```
+
+```{r borthweight - propensity score stratification }
+
+# so for ATT using PRS we need to use quintiles cutoffs of controls, and apply them to the treated: Why? 
+
+te_quintile <- 
+  
+  tapply(data$Birthweight[data$Group == "T"],  ## outcomes in the treated gorup 
+         ps_quintile[data$Group == "T"], ## quintiles in the treated group 
+         mean) -  # apply mean within each quintile: get proportion of yeses in each stratum 
+  
+	tapply(data$Birthweight[data$Group == "C"],  # outcomes for controls only 
+	       ps_quintile[data$Group == "C"],   # average outcomes for controls within quintiles as defined by treated 
+	       mean)
+
+bw_pss_att <- sum(te_quintile *nAj/nA)
+
+print("PSS ATT Borthweight")
+bw_pss_att
+```
+
+# 1 - D
+
+```{r pregnancy IPW2}
+
+w1 <- ifelse(data$Group == "T", 1, 0)
+w0 <- (1 - ifelse(data$Group == "T", 1, 0))/(1 - data$propensity_scores) * data$propensity_scores
+
+preg_ipw_att <- 
+  weighted.mean(ifelse(data$Preg.ended...37.wk == "Yes", 1, 0), w = w1) - 
+  weighted.mean(ifelse(data$Preg.ended...37.wk == "Yes", 1, 0), w = w0)
+
+print("IPW ATT Pregnancy")
+preg_ipw_att
+
+```
+
+```{r birthweight IPW2}
+
+bw_ipw_att <- 
+  weighted.mean(data$Birthweight, w = w1) - 
+  weighted.mean(data$Birthweight, w = w0)
+
+print("IPW ATT Borthweight")
+bw_ipw_att
+
+```
+
+# 1 - E
+
+```{r create matched data set 1:1 }
+
+data <- data %>% arrange(PID)
+rownames(data) <- 1:nrow(data)
+
+mod_match <- 
+  matchit(
+    # use the same variables to match as a propensity score model 
+    Group ~ Race_ethnicity + Public.Asstce + Use.Tob + N.prev.preg + Live.PTB + 
+                          BL.GE + BL..BOP + BL..PD.4 + BL..CAL.3, 
+    distance = "logit",
+	  method = "nearest",
+    data = data, 
+  	ratio = 1
+    )
+
+# mod_match$match.matrix -- this list contains a list of all rows matched to the controls 
+```
+
+```{r pregnancy 1:1 matching ATT}
+
+p1 <- mean(ifelse(data$Preg.ended...37.wk[data$Group == "T"] == "Yes", 1, 0)) # observed average in the group of treated 
+p0 <- mean(ifelse(data$Preg.ended...37.wk == "Yes", 1, 0)[as.numeric(mod_match$match.matrix)]) # average in the macthed ppl
+
+n1 <- data %>% filter(Group == "T") %>% nrow() # number of treated 
+n0 <- length(as.numeric(mod_match$match.matrix)) # number of controls matched to the treated 
+#n0 <- table(imai$PHN.C1)[1]
+
+preg_match.1.1_att = p1 -  p0
+SE_preg.1.1 <- sqrt(p1*(1-p1)/n1 + p0*(1-p0)/n0) # Var(TRT Estimate) + Var(Matched Est) = Var(ATT)
+                                        # proportions are Bernoulli random variable 
+
+print("1:1 ATT Pregnancy")
+preg_match.1.1_att
+
+```
+
+```{r birthweight 1:1 matching ATT}
+m1 <- mean(data$Birthweight[data$Group == "T"]) # observed average in the group of treated 
+m0 <- mean(data$Birthweight[as.numeric(mod_match$match.matrix)]) # average in the macthed ppl
+
+bw_match.1.1_att = m1 -  m0
+SE_bw.1.1 <- sqrt((sd(data$Birthweight[data$Group == "T"])^2)/n1 + 
+             (sd(data$Birthweight[as.numeric(mod_match$match.matrix)])^2)/n0 
+           ) # Var(TRT Estimate) + Var(Matched Est) = Var(ATT)
+              # These are continuous so, we just need to calculate their variances 
+
+print("1:1 ATT Borthweight")
+bw_match.1.1_att
+```
+
+
+```{r create matched data set 2:1 }
+
+data <- data %>% arrange(PID)
+rownames(data) <- 1:nrow(data)
+
+mod_match2 <- 
+  matchit(
+    # use the same variables to match as a propensity score model 
+    ifelse(Group == "T", 1, 0) ~ Race_ethnicity + Public.Asstce + Use.Tob + N.prev.preg + Live.PTB + 
+                          BL.GE + BL..BOP + BL..PD.4 + BL..CAL.3, 
+    distance = "logit",
+	  method = "nearest",
+    data = data, 
+  	ratio = 2
+    )
+
+# mod_match$match.matrix -- this list contains a list of all rows matched to the controls 
+```
+
+```{r pregnancy 2:1 matching ATT}
+
+p1 <- mean(ifelse(data$Preg.ended...37.wk[data$Group == "T"] == "Yes", 1, 0)) # observed average in the group of treated 
+p0 <- mean(ifelse(data$Preg.ended...37.wk == "Yes", 1, 0)[as.numeric(mod_match2$match.matrix)]) # average in the macthed ppl
+
+n1 <- data %>% filter(Group == "T") %>% nrow() # number of treated 
+n0 <- length(as.numeric(mod_match2$match.matrix)) # number of controls matched to the treated 
+#n0 <- table(imai$PHN.C1)[1]
+
+preg_match.1.2_att = p1 -  p0
+SE_preg.1.2 <- sqrt(p1*(1-p1)/n1 + p0*(1-p0)/n0) # Var(TRT Estimate) + Var(Matched Est) = Var(ATT)
+                                        # proportions are Bernoulli random variable 
+
+print("2:1 ATT Pregnancy")
+preg_match.1.2_att
+```
+
+```{r birthweight 2:1 matching ATT}
+m1 <- mean(data$Birthweight[data$Group == "T"]) # observed average in the group of treated 
+m0 <- mean(data$Birthweight[as.numeric(mod_match2$match.matrix)]) # average in the macthed ppl
+
+bw_match.1.2_att = m1 -  m0
+SE_bw.1.2 <- sqrt((sd(data$Birthweight[data$Group == "T"])^2)/n1 + 
+             (sd(data$Birthweight[as.numeric(mod_match2$match.matrix)])^2)/n0 
+           ) # Var(TRT Estimate) + Var(Matched Est) = Var(ATT)
+              # These are continuous so, we just need to calculate their variances 
+
+print("2:1 ATT Pregnancy")
+bw_match.1.2_att
+```
+
+```{r mother of bootstrap}
+#| eval: false 
+
+results <- 
+  data.frame(K = 1:500, 
+             bw_reg = NA, 
+             preg_reg = NA, 
+             bw_ipw = NA,
+             preg_ipw = NA,
+             bw_prs = NA,
+             preg_prs = NA,
+             bw_pss = NA,
+             preg_pss = NA
+             )
+
+set.seed(675926)
+
+for(i in 1:500){
+  resampled = data[sample(1:nrow(data), replace = T, size = nrow(data)), ]
+  
+  ## regression adjutment ATT 
+  print(i)
+  
+  pregnancy_model <- 
+    glm(
+      `Preg.ended...37.wk` ~ 
+        Group + Race_ethnicity + Public.Asstce + Use.Tob + N.prev.preg + 
+        Live.PTB + BL.GE + BL..BOP + BL..PD.4 + BL..CAL.3, 
+      
+      data = resampled, 
+      family = "binomial"
+    )
+  
+  all_no_treat <- resampled %>% 
+    filter(Group == "T") %>% 
+    select(-Group) %>% 
+    mutate(Group = "C")
+  
+  all_no_treat$porential_no_trt <- predict(pregnancy_model, all_no_treat , type = "response")
+  
+  all_treat <- resampled %>% 
+    filter(Group == "T") %>% 
+    select(-Group) %>% 
+    mutate(Group = "T")
+  
+  all_treat$porential_trt <- predict(pregnancy_model, all_treat , type = "response")
+  
+  preg_att <- mean(all_treat$porential_trt, na.rm = T) - mean(all_no_treat$porential_no_trt, na.rm = T) 
+  
+  results$preg_reg[i] = preg_att
+
+  borthweight_model <- 
+    lm(
+      Birthweight ~ 
+      Group *(Race_ethnicity + Public.Asstce + Use.Tob + 
+                N.prev.preg + Live.PTB + BL.GE + BL..BOP + 
+                BL..PD.4 + BL..CAL.3), 
+      
+      data = resampled
+    )
+  
+  
+  all_no_treat <- resampled %>% 
+    filter(Group == "T") %>% 
+    select(-Group) %>% 
+    mutate(Group = "C")
+  
+  all_no_treat$porential_no_trt <- predict(borthweight_model, all_no_treat , type = "response")
+  
+  all_treat <- resampled %>% 
+    filter(Group == "T") %>% 
+    select(-Group) %>% 
+    mutate(Group = "T")
+  
+  all_treat$porential_trt <- predict(borthweight_model, all_treat , type = "response")
+  
+  bwt_att <- mean(all_treat$porential_trt, na.rm = T) - mean(all_no_treat$porential_no_trt, na.rm = T) 
+  results$bw_reg[i] = bwt_att
+  
+  # 1 - B 
+  
+  propensity_score_model <- glm(
+    
+    I(data$Group == "T") %>% as.numeric() ~ 
+      Race_ethnicity + Public.Asstce +
+      Use.Tob + N.prev.preg + Live.PTB + 
+      BL.GE + BL..BOP + BL..PD.4 + BL..CAL.3, 
+    
+    data = resampled, 
+    family = "binomial"
+  )
+  
+  resampled$propensity_scores <- propensity_score_model$fitted.values
+  # simple model has the smallest AIC 
+  preg_prop_regression <- 
+    glm(`Preg.ended...37.wk` ~ Group*propensity_scores, data = resampled, family = "binomial")
+  
+  
+  all_no_treat <- resampled %>% 
+    filter(Group == "T") %>% 
+    select(-Group) %>% 
+    mutate(Group = "C")
+  
+  all_no_treat$porential_no_trt <- predict(preg_prop_regression, all_no_treat , type = "response")
+  
+  all_treat <- resampled %>% 
+    filter(Group == "T") %>% 
+    select(-Group) %>% 
+    mutate(Group = "T")
+  
+  all_treat$porential_trt <- predict(preg_prop_regression, all_treat , type = "response")
+  
+  preg_att_psr <- mean(all_treat$porential_trt, na.rm = T) - mean(all_no_treat$porential_no_trt, na.rm = T) 
+  results$preg_prs[i] = preg_att_psr
+  
+  
+  
+  # simple model has the smallest AIC 
+  bw_prop_regression <- 
+    lm(Birthweight ~ Group*propensity_scores, data = resampled)
+  
+  all_no_treat <- resampled %>% 
+    filter(Group == "T") %>% 
+    select(-Group) %>% 
+    mutate(Group = "C")
+  
+  all_no_treat$porential_no_trt <- predict(bw_prop_regression, all_no_treat , type = "response")
+  
+  all_treat <- resampled %>% 
+    filter(Group == "T") %>% 
+    select(-Group) %>% 
+    mutate(Group = "T")
+  
+  all_treat$porential_trt <- predict(bw_prop_regression, all_treat , type = "response")
+  
+  bw_att_psr <- mean(all_treat$porential_trt, na.rm = T) - mean(all_no_treat$porential_no_trt, na.rm = T) 
+  
+  results$bw_prs[i] =  bw_att_psr
+
+  # so for ATT using PRS we need to use quintiles cutoffs of controls, and apply them to the treated: Why? 
+  
+  ps_quintile <- 
+    cut(resampled$propensity_scores, 
+        breaks = c(0, 
+                   quantile(resampled[resampled$Group == "T", ]$propensity_score, p = c(0.2, 0.4, 0.6, 0.8)), 
+                   1), 
+        labels = 1:5)
+  
+  nA <- nrow(resampled[resampled$Group == "T", ])
+  nAj <- table(ps_quintile[resampled$Group == "T"])
+  
+  te_quintile <- 
+    
+    tapply(ifelse(resampled$`Preg.ended...37.wk`[resampled$Group == "T"] == "Yes",1,0),  ## outcomes in the treated gorup 
+           ps_quintile[resampled$Group == "T"], ## quintiles in the treated group 
+           mean) -  # apply mean within each quintile: get proportion of yeses in each stratum 
+    
+  	tapply(ifelse(resampled$`Preg.ended...37.wk`[resampled$Group == "C"] == "Yes",1,0),  # outcomes for controls only 
+  	       ps_quintile[resampled$Group == "C"],   # average outcomes for controls within quintiles as defined by treated 
+  	       mean)
+  
+  preg_pss_att <- sum(te_quintile *nAj/nA)
+  
+  results$preg_pss[i] =  preg_pss_att
+
+  # so for ATT using PRS we need to use quintiles cutoffs of controls, and apply them to the treated: Why? 
+  
+  te_quintile <- 
+    
+    tapply(resampled$Birthweight[resampled$Group == "T"],  ## outcomes in the treated gorup 
+           ps_quintile[resampled$Group == "T"], ## quintiles in the treated group 
+           mean) -  # apply mean within each quintile: get proportion of yeses in each stratum 
+    
+  	tapply(resampled$Birthweight[resampled$Group == "C"],  # outcomes for controls only 
+  	       ps_quintile[resampled$Group == "C"],   # average outcomes for controls within quintiles as defined by treated 
+  	       mean)
+  
+  bw_pss_att <- sum(te_quintile *nAj/nA)
+  
+  results$bw_pss[i] =  bw_pss_att
+  
+  w1 <- ifelse(resampled$Group == "T", 1, 0)
+  w0 <- (1 - ifelse(resampled$Group == "T", 1, 0))/(1 - resampled$propensity_scores) * resampled$propensity_scores
+  
+  preg_ipw_att <- 
+    weighted.mean(ifelse(resampled$Preg.ended...37.wk == "Yes", 1, 0), w = w1) - 
+    weighted.mean(ifelse(resampled$Preg.ended...37.wk == "Yes", 1, 0), w = w0)
+  
+   results$preg_ipw[i] =  preg_ipw_att
+
+  bw_ipw_att <- 
+    weighted.mean(resampled$Birthweight, w = w1) - 
+    weighted.mean(resampled$Birthweight, w = w0)
+  
+   results$bw_ipw[i] =  bw_ipw_att
+
+}
+
+View(results)
+write.csv(results, "ATT_bootsrapped_results.csv")
+
+summary(results)
+
+```
+
+```{r}
+results = read_csv( "ATT_bootsrapped_results.csv", show_col_types = F)[,-1]
+
+results_plot <- 
+  results %>% 
+  pivot_longer(
+    cols = setdiff(colnames(.), 
+                   "K"), 
+    names_to = "estimator", 
+    values_to = "booted"
+  ) %>% 
+  group_by(estimator) %>% 
+  summarise(Est_booted = mean(booted), 
+            SE = sd(booted)
+            ) %>% 
+  mutate(outcome = case_when(substr(estimator, 1, 2) == "bw" ~ "bw", 
+                             T ~ "preg"), 
+         method = case_when(grepl("ipw", estimator, ignore.case = T) == T ~ "IPW2",
+                            grepl("prs", estimator, ignore.case = T) == T ~ "PRS",
+                            grepl("pss", estimator, ignore.case = T) == T ~ "PSS",
+                            grepl("reg", estimator, ignore.case = T) == T ~ "Regression"
+                            )
+         ) %>% select(-estimator) %>% 
+  arrange(outcome, method) %>% 
+  mutate(est_calc = c(
+    bw_ipw_att,
+    bw_att_psr,
+    bw_pss_att, 
+    bwt_att, 
+    
+    preg_ipw_att,
+    preg_att_psr, 
+    preg_pss_att, 
+    preg_att
+  ))
+
+results_plot <- 
+  rbind(results_plot, 
+        data.frame(Est_booted = preg_match.1.1_att, SE = SE_preg.1.1, 
+                   outcome = "preg", method = "1:1 Match", est_calc = preg_match.1.1_att),
+        data.frame(Est_booted = bw_match.1.1_att, SE = SE_bw.1.1, outcome = "bw", 
+                   method = "1:1 Match", est_calc = bw_match.1.1_att),
+        data.frame(Est_booted = preg_match.1.2_att, SE = SE_preg.1.2, outcome = "preg", 
+                   method = "2:1 Match", est_calc = preg_match.1.2_att),
+        data.frame(Est_booted = bw_match.1.2_att, SE = SE_bw.1.2, outcome = "bw", 
+                   method = "2:1 Match", est_calc = bw_match.1.2_att)
+        )
+
+```
+
+```{r pregnancy estimators comparisons}
+#| label: fig-preg-atts
+#| fig-cap: "Comparison of Estiamtion Method Varinances for ATT of Pregnancy Outcome" 
+
+ggplot(data = results_plot %>% filter(outcome == "preg"), 
+       aes(x =  method, y =  est_calc)) + 
+  geom_point(size = 2) + 
+  geom_errorbar(aes(ymin = est_calc - 1.96 * SE, ymax = est_calc + 1.96 * SE), width = 0.25) + 
+  theme_classic() + 
+  
+  scale_y_continuous(breaks = seq(from = -.1, to = .05, by = 0.01), 
+                     limits = c(-.1, .05)) + 
+  theme(
+    title = element_text(size = 8)
+  ) + 
+  
+  geom_hline(yintercept = 0, linetype = "dashed", size = 1, color = "red") + 
+  
+  xlab("Estimation Method") + 
+  ylab("Estiamte with 95% Confidence Interval")
+
+```
+
+
+```{r birthweight estimators comparisons}
+#| label: fig-bw-atts
+#| fig-cap: "Comparison of Estiamtion Method Varinances for ATT of Birthweight Outcome" 
+
+ggplot(data = results_plot %>% filter(outcome == "bw"), 
+       aes(x =  method, y =  est_calc)) + 
+  geom_point(size = 2) + 
+  geom_errorbar(aes(ymin = est_calc - 1.96 * SE, ymax = est_calc + 1.96 * SE), width = 0.25) + 
+  theme_classic() + 
+  
+  scale_y_continuous(breaks = seq(from = -100, to = 300, by = 50), 
+                     limits = c(-100, 300)) + 
+  theme(
+    title = element_text(size = 8)
+  ) + 
+  
+  geom_hline(yintercept = 0, linetype = "dashed", size = 1, color = "red") + 
+  
+  xlab("Estimation Method") + 
+  ylab("Estiamte with 95% Confidence Interval")
+
+```
+
+# Problem 2 
+
+```{r table one - raw unadjusted differences between treated and controls }
+
+Variables = c(
+    "Race_ethnicity", "Public.Asstce", "Use.Tob", "Live.PTB",  
+     "N.prev.preg", "BL.GE", "BL..BOP", "BL..PD.4", "BL..CAL.3"
+  )
+
+other_vars <- 
+  setdiff(
+    colnames(data),
+    Variables
+  )
+other_vars <- other_vars[other_vars != "Group"]
+
+### also apparently David wants the whole table here. So we need to include all vairables 
+
+CreateTableOne(
+  data = data, 
+  strata = "Group", 
+  vars = c(Variables, other_vars), 
+  test = F, 
+  smd = T
+) -> raw_table_1
+
+ExtractSmd(raw_table_1) ->  raw_SMD
+```
+
+```{R table one - weithed by propensity score model }
+
+replace_extremes = 
+  function(x){
+    x = case_when(
+      x == 0 ~ 0.1 * 10e-15,
+      x == 1 ~ x-0.1 * 10e-15, 
+      T ~ x
+    )
+    
+    return(x)
+  }
+
+
+# create weighted tables now: 
+trt <- ifelse(data$Group == "T", 1, 0)
+
+###
+### A ### 
+# weight is TRT/PS + (1-TRT)/(1-PS)
+ps = propensity_score_model$fitted.values
+weight_a <- trt/ps + (1 - trt)/(1- ps) 
+weight_a <- replace_extremes(weight_a)
+data_a <- svydesign(ids = ~ 1, data = data, weights = ~ weight_a)
+
+
+tabWeighted_a <- 
+  svyCreateTableOne(
+    vars = c(Variables, other_vars), 
+    strata = "Group",
+    data = data_a, 
+    test = FALSE, 
+    smd = T
+    )
+
+ExtractSmd(tabWeighted_a) ->  SMD_weighted 
+
+```
+
+```{r table one - 1:1 matching }
+
+data %>% filter(Group == "T") %>% rownames() %>% as.numeric() -> treated 
+as.numeric(mod_match$match.matrix) -> matched 
+
+data_match.1.1 <- data[c(treated, matched), ]
+
+CreateTableOne(
+  data = data_match.1.1, 
+  strata = "Group", 
+  vars = c(Variables, other_vars), 
+  test = F, 
+  smd = T
+) -> table_1_match.1.1
+
+ExtractSmd(table_1_match.1.1) ->  SMD_match.1.1
+
+```
+
+```{r table one - 1:2 matching }
+
+data %>% filter(Group == "T") %>% rownames() %>% as.numeric() -> treated 
+as.numeric(mod_match2$match.matrix) -> matched 
+
+data_match.1.2 <- data[c(treated, matched), ]
+
+CreateTableOne(
+  data = data_match.1.2, 
+  strata = "Group", 
+  vars = c(Variables, other_vars), 
+  test = F, 
+  smd = T
+) -> table_1_match.1.2
+
+ExtractSmd(table_1_match.1.2) ->  SMD_match.1.2
+
+```
+
+```{r put together all smds for plotting }
+
+all_SMDs = 
+  rbind(
+    data.frame(SMD_match.1.2) %>% mutate(type = "1:2 Matching", variable = rownames(.)),
+    data.frame(SMD_match.1.1) %>% mutate(type = "1:1 Matching", variable = rownames(.)),
+    data.frame(SMD_weighted) %>% mutate(type = "IPW Logistic Regression", variable = rownames(.)), 
+    data.frame(raw_SMD) %>% mutate(type = "Unadjusted", variable = rownames(.))
+  )  %>% 
+  mutate(
+    variable = factor(variable, 
+                      levels = c(Variables, other_vars))
+  )
+
+```
+
+```{r SMD plot}
+#| label: fig-smds
+#| fig-cap: "Comparion of confounding adjustment methods and their impact on SMDs"
+#| fig-width: 10
+#| fig-height: 14
+#| 
+ggplot(data = all_SMDs, 
+       mapping = aes(x = variable , y = X1.vs.2, group = type, color = type)) +
+  geom_point() + 
+  geom_line(na.rm = T) + 
+  theme_classic() + 
+  scale_x_discrete(name = "") + 
+  geom_hline(yintercept = 0) + 
+  geom_vline(xintercept = 9, color = "blue", linetype = "dashed", size = 2, alpha = 0.5) + # this should be something minus 9  
+  geom_hline(color = "black", linetype = "dashed", yintercept = 0.1, size = 2, alpha = 0.5) + 
+  theme(
+    legend.position = "bottom"
+  ) +
+  coord_flip()  + 
+  labs(color = "Balancing Method") + 
+  guides(color = guide_legend(nrow = 2))
+
+```
+
+```{r asses distribution of propensity scores in 1:1 matching }
+#| label: fig-dist11
+#| fig-height: 8
+#| fig-cap: "Distribution of Propensity Scores Before and After 1:1 Matching"
+plot(mod_match, type = "hist")
+```
+
+```{r assess distribtuion of propensity scores in 2:1 matching}
+#| label: fig-dist12
+#| fig-height: 8
+#| fig-cap: "Distribution of Propensity Scores Before and After 2:1 Matching"
+plot(mod_match2, type = "hist")
+```
+
+```{r}
+#| label: fig-prop-diff
+#| fig-cap: "Difference between the Treated ith Matched Control" 
+#| 
+rbind(
+  data.frame(
+    from = rownames(mod_match2$match.matrix), 
+    match = mod_match2$match.matrix[,1],
+    type = "1", 
+    p_score_trt = data$propensity_scores[as.numeric(rownames(mod_match2$match.matrix))],
+    p_score_cnt = data$propensity_scores[as.numeric(mod_match2$match.matrix[,1])]
+  ),
+  
+  data.frame(
+    from = rownames(mod_match2$match.matrix), 
+    match = mod_match2$match.matrix[,2], 
+    type = "2",
+    p_score_trt = data$propensity_scores[as.numeric(rownames(mod_match2$match.matrix))],
+    p_score_cnt = data$propensity_scores[as.numeric(mod_match2$match.matrix[,2])]
+  )
+) -> matches_and_dist
+
+ggplot(data = matches_and_dist, 
+       mapping = aes(x = (p_score_cnt - p_score_trt), group = type, fill = type
+                     )) + 
+  geom_histogram(binwidth = 0.01, color = "darkgrey") + 
+  theme_classic() + 
+  labs(x  = "Propensity Score TRT minus Propensity Score Matched", 
+        color = "Difference to ith \nMatched Control")
+
+```
