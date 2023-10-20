@@ -4,13 +4,14 @@ format:
   pdf:
     toc: false
 execute: 
-  echo: false
+  echo: true
   warning: false
   message: false
 ---
 
 
 ```{r read packages }
+#| echo: false 
 total_nchar = nchar(getwd())
 remove_nchar = nchar("HW1")
 path = substr(getwd(), 1, total_nchar - remove_nchar)
@@ -18,6 +19,7 @@ source(paste0(path,"Master Packages.R"))
 ```
 
 ```{r read in data}
+#| echo: false 
 data1 <- load("OPT_Study_PUBH7485_8485_2023.Rdata")
 
 # Notice that the result of this function is not assigned to an object name. When R calls load(), all of the R objects saved in the file are loaded into R. The names given to these objects when they were originally saved will be given to them when they are loaded. The command >  ls() can be used to print out all of the objects currently loaded into R.
@@ -46,6 +48,7 @@ the previous assignments.
 `Use.Alc`  is imputed with a mode like `Race_ethnicity`, `Use.Tob`
 
 ```{r imputation and data set preparation }
+#| echo: false 
 ## imputation 
 
 median_bw <- median(data$Birthweight, na.rm = T)
@@ -93,12 +96,22 @@ data <-
 
 ```
 
+**Note: I left small steps and explanations for myself for future use** 
+
 # Problem 1
 
-## 1 - A
+## 1 - A: regression adjustment 
+
+Code chunk below produces average treatment effect among treated for the pre-term pregnancy reduction reduction. 
+The basic idea is: 
+
+1. Develop and 'outcome' regression model using all available data 
+2. Subset the data to those who received treatment 
+3. Take the difference between average of model estimated counterfactuals under the condition that everyone received treatment and 
+average of model estimated counterfactuals under the condition of no treatment for everyone. 
 
 ```{r regression adjustment for pregnancy  }
-#| echo: true
+
 pregnancy_model <- 
   glm(
     `Preg.ended...37.wk` ~ 
@@ -125,10 +138,9 @@ all_treat$porential_trt <- predict(pregnancy_model, all_treat , type = "response
 
 preg_att <- mean(all_treat$porential_trt, na.rm = T) - mean(all_no_treat$porential_no_trt, na.rm = T) 
 
-print("Regression ATT Pregnancy")
-preg_att
-
 ```
+
+Code below shows how to estimate birthweight increase average treatment effect among treated using regression adjustment approach.
 
 ```{r regression adjustment for borthweight }
 
@@ -159,14 +171,11 @@ all_treat$porential_trt <- predict(borthweight_model, all_treat , type = "respon
 
 bwt_att <- mean(all_treat$porential_trt, na.rm = T) - mean(all_no_treat$porential_no_trt, na.rm = T) 
 
-print("Regression ATT Birthweight")
-bwt_att
-
-
-
 ```
 
-# 1 - B 
+# 1 - B: propensity score regression adjustment 
+
+First, we develop a propensity score model using the same approach and a set of covariates as all previous assignments 
 
 ```{r propensity score model}
 
@@ -184,6 +193,17 @@ propensity_score_model <- glm(
 data$propensity_scores <- propensity_score_model$fitted.values
 
 ```
+
+Idea of propensity score regression adjustment: 
+
+1. Use propensity score as a statistic that summarizes all measured confounding variables as a predictor in the 'outcome' regression model
+2. Develop a flexible 'outcome' regression model with propensity score, treatment variable, and their interaction if possible. Use all available data, both controls and treated. 
+3. Compare average of counterfactuals under treatment and no treatment for the entire population/sample of treated people. 
+
+*Model Choice:* we covered how we can apply splines to regression scores to obtain non-linear regression effects. I tried several 
+models and concluded that a simple model with only an interaction term has the smallest AIC. 
+
+Propensity score regression adjustment for the pregnancy ATT is given below: 
 
 ```{r pregnancy propensity score + trt regression }
 
@@ -208,10 +228,9 @@ all_treat$porential_trt <- predict(preg_prop_regression, all_treat , type = "res
 
 preg_att_psr <- mean(all_treat$porential_trt, na.rm = T) - mean(all_no_treat$porential_no_trt, na.rm = T) 
 
-print("PSR ATT Pregnancy")
-preg_att_psr
-
 ```
+
+Propensity score regression adjustment for the birthweight ATT is given below. I also selected a more simple model based on AIC. 
 
 ```{r borthweight propensity score + trt regression }
 
@@ -235,11 +254,23 @@ all_treat$porential_trt <- predict(bw_prop_regression, all_treat , type = "respo
 
 bw_att_psr <- mean(all_treat$porential_trt, na.rm = T) - mean(all_no_treat$porential_no_trt, na.rm = T) 
 
-print("PSR ATT Borthweight")
-bw_att_psr
 ```
 
-# 1 - C
+# 1 - C: propensity score stratification
+
+Estimation idea: use 'bucket assignment' and weights for quintiles/'buckets' obtained from the treated sample only. But, we apply 
+this quintile cutoffs and quintile weights to both treated and untreated controls. Since we do not have a way of estimating 
+counteractions under no treatment for treated subjects in this approach, we hope that by bucketing treated and controls with similar propensity score we compare similar people. Untreated controls with similar characteristics, on average, provide $E[Y^0]$ for treated, i.e. what their average would be had they not received treatment. 
+
+Estimation procedure: 
+1. Develop a propensity score model using all available data 
+2. Find cut-off values for propensity score quintiles using only treated subjects 
+3. Find weights of each quintile using the distribution of treated subjects into buckets 
+4. Compare average observed outcome between treated and controls in each quintile/group
+5. Take the weighted average of differences. 
+
+
+Estimation of PSS ATT for pregnancy outcome: 
 
 ```{r pregnancy - propensity score stratification }
 
@@ -267,9 +298,9 @@ te_quintile <-
 
 preg_pss_att <- sum(te_quintile *nAj/nA)
 
-print("PSS ATT Pregnancy")
-preg_pss_att
 ```
+
+Estimation of PSS birht weight ATT: 
 
 ```{r borthweight - propensity score stratification }
 
@@ -287,11 +318,14 @@ te_quintile <-
 
 bw_pss_att <- sum(te_quintile *nAj/nA)
 
-print("PSS ATT Borthweight")
-bw_pss_att
 ```
 
 # 1 - D
+
+Estimation idea: estimating ATE using IPW involved weights $\large \frac{A_i}{\pi_i}$ for treated and $\large \frac{1-A_i}{1-\pi_i}$ for controls. Now, we intend to estimate ATT, so we focus on the population of treated. Therefore, similarly to PSS, we treat outcomes for controls as if these are outcomes that treated people would have had they not received treatment. 
+When estimating ATT using such observational data, we need to additionally multiply weights by $\pi_i$. 
+
+*Motivation for doing this procedure other than mathematical way of obtaining $E[Y^1|A=1]$ from $E[Y^1]$ are not yet clear to me*
 
 ```{r pregnancy IPW2}
 
@@ -302,8 +336,6 @@ preg_ipw_att <-
   weighted.mean(ifelse(data$Preg.ended...37.wk == "Yes", 1, 0), w = w1) - 
   weighted.mean(ifelse(data$Preg.ended...37.wk == "Yes", 1, 0), w = w0)
 
-print("IPW ATT Pregnancy")
-preg_ipw_att
 
 ```
 
@@ -313,12 +345,22 @@ bw_ipw_att <-
   weighted.mean(data$Birthweight, w = w1) - 
   weighted.mean(data$Birthweight, w = w0)
 
-print("IPW ATT Borthweight")
-bw_ipw_att
-
 ```
 
 # 1 - E
+
+**1:1 propensity score matching**
+
+*1:1 and 2:1 matching is self explanatory* 
+
+1. David suggested we could 'exploit' correlation, stemming from the fact that 
+matched controls and treated subjects *should* have similar covariates, through similar propensity scores, therefore we may argue that their outcomes are correlated. We could use a matched t-test to get a C.I. in a 1:1 matched sample, however, I am not sure how to proceed in a 2:1 matched sample, so I will not employ this estimation method. 
+
+2. We will see that there are still some covariates that are not balanced in the 1:1 and 2:1 matched samples. In order to 
+achieve higher degree of balance, I attmented to match exactly on imbalanced covariates, but found that: 
+
+   - software was not able to find matched for everyone, especially in the 2:1 matched sample, and I did not want to discard the data. 
+   - even after exact match on those imbalanced covariates, I still was not able to achive SMD of less than or around 0.1 
 
 ```{r create matched data set 1:1 }
 
@@ -352,8 +394,6 @@ preg_match.1.1_att = p1 -  p0
 SE_preg.1.1 <- sqrt(p1*(1-p1)/n1 + p0*(1-p0)/n0) # Var(TRT Estimate) + Var(Matched Est) = Var(ATT)
                                         # proportions are Bernoulli random variable 
 
-print("1:1 ATT Pregnancy")
-preg_match.1.1_att
 
 ```
 
@@ -367,10 +407,9 @@ SE_bw.1.1 <- sqrt((sd(data$Birthweight[data$Group == "T"])^2)/n1 +
            ) # Var(TRT Estimate) + Var(Matched Est) = Var(ATT)
               # These are continuous so, we just need to calculate their variances 
 
-print("1:1 ATT Borthweight")
-bw_match.1.1_att
 ```
 
+**2:1 propensity score matching**
 
 ```{r create matched data set 2:1 }
 
@@ -387,7 +426,6 @@ mod_match2 <-
     data = data, 
   	ratio = 2
     )
-
 # mod_match$match.matrix -- this list contains a list of all rows matched to the controls 
 ```
 
@@ -404,8 +442,6 @@ preg_match.1.2_att = p1 -  p0
 SE_preg.1.2 <- sqrt(p1*(1-p1)/n1 + p0*(1-p0)/n0) # Var(TRT Estimate) + Var(Matched Est) = Var(ATT)
                                         # proportions are Bernoulli random variable 
 
-print("2:1 ATT Pregnancy")
-preg_match.1.2_att
 ```
 
 ```{r birthweight 2:1 matching ATT}
@@ -418,13 +454,11 @@ SE_bw.1.2 <- sqrt((sd(data$Birthweight[data$Group == "T"])^2)/n1 +
            ) # Var(TRT Estimate) + Var(Matched Est) = Var(ATT)
               # These are continuous so, we just need to calculate their variances 
 
-print("2:1 ATT Pregnancy")
-bw_match.1.2_att
 ```
 
-```{r mother of bootstrap}
+```{r mother of bootstraps}
 #| eval: false 
-
+#| echo: false 
 results <- 
   data.frame(K = 1:500, 
              bw_reg = NA, 
@@ -517,7 +551,7 @@ for(i in 1:500){
   resampled$propensity_scores <- propensity_score_model$fitted.values
   # simple model has the smallest AIC 
   preg_prop_regression <- 
-    glm(`Preg.ended...37.wk` ~ Group*propensity_scores, data = resampled, family = "binomial")
+    glm(`Preg.ended...37.wk` ~ Group*rms::rcs(propensity_scores, 5), data = resampled, family = "binomial")
   
   
   all_no_treat <- resampled %>% 
@@ -541,7 +575,7 @@ for(i in 1:500){
   
   # simple model has the smallest AIC 
   bw_prop_regression <- 
-    lm(Birthweight ~ Group*propensity_scores, data = resampled)
+    lm(Birthweight ~ Group*rms::rcs(propensity_scores, 5), data = resampled)
   
   all_no_treat <- resampled %>% 
     filter(Group == "T") %>% 
@@ -628,6 +662,7 @@ summary(results)
 ```
 
 ```{r}
+#| echo: false 
 results = read_csv( "ATT_bootsrapped_results.csv", show_col_types = F)[,-1]
 
 results_plot <- 
@@ -677,7 +712,18 @@ results_plot <-
 
 ```
 
+Using bootstrap I obtained standard errors for all estimators, except matched estimators. Variance and 95% confidence intervals
+were calculated directly from the matched sample of data. @fig-preg-atts compares variance all considered ATT estimators. As we
+can see, they have relatively similar variance and point estimates. The only exception is 1:1 matched sample estimate, which has a 
+notably higher variance, probably due to the fact that we discard some data and lose statistical power. 
+
+An interesting observation to me was the fact that 2:1 matching point estimate is close to other methods. In previous assignments 
+we saw that the un-adjusted treatment effect was -0.0332. However, 2:1 also uses almost the entire data set, the ratio of controls 
+to treated is abound 2.2 in the data set. In fact, the rate of unfavorable pregnancy outcomes among non-matched controls is 
+0.289, which is extremely high compared to the unadjusted effect, or any ATT we estimated. 
+
 ```{r pregnancy estimators comparisons}
+#| echo: false 
 #| label: fig-preg-atts
 #| fig-cap: "Comparison of Estiamtion Method Varinances for ATT of Pregnancy Outcome" 
 
@@ -687,8 +733,6 @@ ggplot(data = results_plot %>% filter(outcome == "preg"),
   geom_errorbar(aes(ymin = est_calc - 1.96 * SE, ymax = est_calc + 1.96 * SE), width = 0.25) + 
   theme_classic() + 
   
-  scale_y_continuous(breaks = seq(from = -.1, to = .05, by = 0.01), 
-                     limits = c(-.1, .05)) + 
   theme(
     title = element_text(size = 8)
   ) + 
@@ -700,8 +744,10 @@ ggplot(data = results_plot %>% filter(outcome == "preg"),
 
 ```
 
+@fig-bw-atts shows ATT estimates and variance associated with each method of estimation. Same comments apply here. 
 
 ```{r birthweight estimators comparisons}
+#| echo: false 
 #| label: fig-bw-atts
 #| fig-cap: "Comparison of Estiamtion Method Varinances for ATT of Birthweight Outcome" 
 
@@ -711,8 +757,6 @@ ggplot(data = results_plot %>% filter(outcome == "bw"),
   geom_errorbar(aes(ymin = est_calc - 1.96 * SE, ymax = est_calc + 1.96 * SE), width = 0.25) + 
   theme_classic() + 
   
-  scale_y_continuous(breaks = seq(from = -100, to = 300, by = 50), 
-                     limits = c(-100, 300)) + 
   theme(
     title = element_text(size = 8)
   ) + 
@@ -727,7 +771,7 @@ ggplot(data = results_plot %>% filter(outcome == "bw"),
 # Problem 2 
 
 ```{r table one - raw unadjusted differences between treated and controls }
-
+#| echo: false
 Variables = c(
     "Race_ethnicity", "Public.Asstce", "Use.Tob", "Live.PTB",  
      "N.prev.preg", "BL.GE", "BL..BOP", "BL..PD.4", "BL..CAL.3"
@@ -754,6 +798,7 @@ ExtractSmd(raw_table_1) ->  raw_SMD
 ```
 
 ```{R table one - weithed by propensity score model }
+#| echo: false
 
 replace_extremes = 
   function(x){
@@ -793,6 +838,7 @@ ExtractSmd(tabWeighted_a) ->  SMD_weighted
 ```
 
 ```{r table one - 1:1 matching }
+#| echo: false
 
 data %>% filter(Group == "T") %>% rownames() %>% as.numeric() -> treated 
 as.numeric(mod_match$match.matrix) -> matched 
@@ -812,6 +858,7 @@ ExtractSmd(table_1_match.1.1) ->  SMD_match.1.1
 ```
 
 ```{r table one - 1:2 matching }
+#| echo: false
 
 data %>% filter(Group == "T") %>% rownames() %>% as.numeric() -> treated 
 as.numeric(mod_match2$match.matrix) -> matched 
@@ -831,6 +878,7 @@ ExtractSmd(table_1_match.1.2) ->  SMD_match.1.2
 ```
 
 ```{r put together all smds for plotting }
+#| echo: false
 
 all_SMDs = 
   rbind(
@@ -846,7 +894,11 @@ all_SMDs =
 
 ```
 
+@fig-smds shows SMD between treated and untreated using raw sample data and weighted/matched samples. IPW 'upsampled' groups shows 
+the best balance between covariates incluedd in the propensity score model. Matched samples still show a large degree of imbalance. I tried to balance covariates foe high SMD through exact matching, which was not successful. 
+
 ```{r SMD plot}
+#| echo: false
 #| label: fig-smds
 #| fig-cap: "Comparion of confounding adjustment methods and their impact on SMDs"
 #| fig-width: 10
@@ -870,21 +922,36 @@ ggplot(data = all_SMDs,
 
 ```
 
+@fig-dist11 shows the distribution of propensity scores before and after matching. It looks like 1:1 achieves a reasonably more 
+balanced distribution, although its shape is different between the groups. 
+
 ```{r asses distribution of propensity scores in 1:1 matching }
+#| echo: false 
 #| label: fig-dist11
 #| fig-height: 8
 #| fig-cap: "Distribution of Propensity Scores Before and After 1:1 Matching"
 plot(mod_match, type = "hist")
 ```
 
+@fig-dist12 shows the distribution of propensity scores before and after matching. It looks like 2:1 is very similar to full 
+sample differences, because we only about 40 subjects in the 2:1 matching process. 
+
 ```{r assess distribtuion of propensity scores in 2:1 matching}
+#| echo: false 
 #| label: fig-dist12
 #| fig-height: 8
 #| fig-cap: "Distribution of Propensity Scores Before and After 2:1 Matching"
 plot(mod_match2, type = "hist")
 ```
 
+@fig-prop-diff shows distribution of differences in propensity scores for a treated subjects and their matched control. 
+The difference in scores from a treated subject to the first matched control is centered at 0, which implies that every matched 
+person has a very similar propensity score. 
+
+As we can see, second matched controls are usually further away from their matched treated subject in terms of propensity score. Sometimes the difference gets as high as 0.2, which is quite high, but to be expected. 
+
 ```{r}
+#| echo: false 
 #| label: fig-prop-diff
 #| fig-cap: "Difference between the Treated ith Matched Control" 
 #| 
