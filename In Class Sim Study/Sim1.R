@@ -185,14 +185,19 @@ for(j in 1:length(treatments)){
     # CD43, R3, 
     # CD44 will be estimated inside the loop 
     
-    sim_1 = 
-      data.frame(
-        CD40 = rnorm(n = 100000, 
-                     mean = mean(data$CD40) + rnorm(n = 1, mean = 0, sd = 1), 
-                     sd = sd(data$CD40) + abs(rnorm(n = 1, mean = 0, sd = 1))
-                     ), 
-        R0 = 0
-      ) 
+    # possible types: "normal"
+    type = "normal"
+    
+    if(type == "normal"){
+      sim_1 = 
+        data.frame(
+          CD40 = rnorm(n = 100000, 
+                       mean = mean(data$CD40) + rnorm(n = 1, mean = 0, sd = 1), 
+                       sd = sd(data$CD40) + abs(rnorm(n = 1, mean = 0, sd = 1))
+                       ), 
+          R0 = 0
+        ) 
+    }
     
     summary(sim_1$CD40)
     
@@ -269,7 +274,8 @@ mean_plots_data_CD =
   all_long_res %>% 
   group_by(treatment, time_num) %>% 
   summarise(mean_plot = mean(mean_CD), 
-            sd_plot = sd(mean_CD)/sqrt(100)) %>% 
+            mead_sd = mean(sd_CD), 
+            sd_plot = sd(mean_CD)) %>% 
   
   mutate(ci_min = mean_plot - 1.96 * sd_plot, 
          ci_max = mean_plot + 1.96 * sd_plot)
@@ -281,7 +287,11 @@ ggplot(data = mean_plots_data_CD ,
   geom_line() + 
   geom_errorbar(aes(ymin = ci_min, ymax = ci_max), width = 0.2, alpha = 0.5)
 
-
+ggplot(data = mean_plots_data_CD , 
+       mapping = aes(x = time_num, y = mean_plot, group = treatment, color = treatment)) + 
+  theme_classic() + 
+  geom_point(size = 2) + 
+  geom_line()
 ### Average Resistance 
 mean_plots_data_R = 
   all_long_res %>% 
