@@ -197,7 +197,7 @@ for(j in 1:length(treatments)){
           #              sd = sd(data$CD40) + abs(rnorm(n = 1, mean = 0, sd = 1))
           #              ), 
           CD40 = rnorm(n = 100000, 
-                       mean = mean(data$CD40) + rnorm(n = 1, mean = 0, sd = 0.1 * sd(data$CD40) ), 
+                       mean = mean(data$CD40) + rnorm(n = 1, mean = 0, sd = sd(data$CD40) / sqrt(nrow(data)) ), 
                        sd = sd(data$CD40) + abs(rnorm(n = 1, mean = 0, sd = 0.1 * sd(data$CD40) ) )
                        ), 
           R0 = 0
@@ -284,8 +284,24 @@ mean_plots_data_CD =
             mead_sd = sd(mean_CD), 
             mean_of_sds = mean(sd_CD)) %>% 
   
-  mutate(ci_min = mean_plot - 1.96 * mead_sd, 
-         ci_max = mean_plot + 1.96 * mead_sd)
+  mutate(ci_min = mean_plot - 1.96 * mean_of_sds, 
+         ci_max = mean_plot + 1.96 * mean_of_sds,
+         
+         ci_min2 = mean_plot - 1.96 * mead_sd, 
+         ci_max2 = mean_plot + 1.96 * mead_sd)
+      
+      ###########################################################
+      mean_plots_data_CD %>% 
+        filter(time_num == 4) %>% 
+        select(treatment, mean_plot, ci_min2, ci_max2) %>% 
+        mutate(treatment = paste0("E(Y^", treatment, ")")) %>% 
+        rename(target_estimand = treatment, 
+               point_estimate = mean_plot, 
+               lower_95	= ci_min2, 
+               upper_95 = ci_max2) %>% 
+        mutate_at(vars('point_estimate', 'lower_95', 'upper_95'), ~ exp(.))
+
+      ###########################################################
 
 ggplot(data = mean_plots_data_CD , 
        mapping = aes(x = time_num, y = mean_plot, group = treatment, color = treatment)) + 
@@ -298,7 +314,8 @@ ggplot(data = mean_plots_data_CD ,
        mapping = aes(x = time_num, y = mean_plot, group = treatment, color = treatment)) + 
   theme_classic() + 
   geom_point(size = 2) + 
-  geom_line()
+  geom_line() + 
+  geom_errorbar(aes(ymin = ci_min2, ymax = ci_max2), width = 0.2, alpha = 0.5)
 ### Average Resistance 
 mean_plots_data_R = 
   all_long_res %>% 
@@ -321,15 +338,10 @@ ggplot(data = mean_plots_data_R ,
 mean_plots_data_CD_SD = 
   all_long_res %>% 
   group_by(treatment, time_num) %>% 
-  summarise(mean_plot = mean(sd_CD), 
-            sd_plot = sd(sd_CD)/sqrt(100)) %>% 
-  
-  mutate(ci_min = mean_plot - 1.96 * sd_plot, 
-         ci_max = mean_plot + 1.96 * sd_plot)
+  summarise(mean_plot = mean(sd_CD)) 
 
 ggplot(data = mean_plots_data_CD_SD , 
        mapping = aes(x = time_num, y = mean_plot, group = treatment, color = treatment)) + 
   theme_classic() + 
   geom_point(size = 2) + 
-  geom_line() + 
-  geom_errorbar(aes(ymin = ci_min, ymax = ci_max), width = 0.2, alpha = 0.5)
+  geom_line() 
