@@ -2,6 +2,7 @@
 rm(list = ls())
 
 source(paste0(getwd(),"/Master Packages.R"))
+# source("Master Packages.R")
 
 data <- read_csv('./In Class Sim Study/dataHW3.csv')[,-1]
 
@@ -185,15 +186,19 @@ for(j in 1:length(treatments)){
     # CD43, R3, 
     # CD44 will be estimated inside the loop 
     
-    # possible types: "normal"
+    # possible types: "simulate"
     type = "normal"
     
     if(type == "normal"){
       sim_1 = 
         data.frame(
+          # CD40 = rnorm(n = 100000, 
+          #              mean = mean(data$CD40) + rnorm(n = 1, mean = 0, sd = 1), 
+          #              sd = sd(data$CD40) + abs(rnorm(n = 1, mean = 0, sd = 1))
+          #              ), 
           CD40 = rnorm(n = 100000, 
-                       mean = mean(data$CD40) + rnorm(n = 1, mean = 0, sd = 1), 
-                       sd = sd(data$CD40) + abs(rnorm(n = 1, mean = 0, sd = 1))
+                       mean = mean(data$CD40) + rnorm(n = 1, mean = 0, sd = 0.1 * sd(data$CD40) ), 
+                       sd = sd(data$CD40) + abs(rnorm(n = 1, mean = 0, sd = 0.1 * sd(data$CD40) ) )
                        ), 
           R0 = 0
         ) 
@@ -220,6 +225,8 @@ for(j in 1:length(treatments)){
 summary(results)
 
 write.csv(results, './In Class Sim Study/100_iter_for_each_5_treatments.csv')
+
+results <- read.csv('./In Class Sim Study/100_iter_for_each_5_treatments.csv')
 
 beepr::beep(4)
 
@@ -274,11 +281,11 @@ mean_plots_data_CD =
   all_long_res %>% 
   group_by(treatment, time_num) %>% 
   summarise(mean_plot = mean(mean_CD), 
-            mead_sd = mean(sd_CD), 
-            sd_plot = sd(mean_CD)) %>% 
+            mead_sd = sd(mean_CD), 
+            mean_of_sds = mean(sd_CD)) %>% 
   
-  mutate(ci_min = mean_plot - 1.96 * sd_plot, 
-         ci_max = mean_plot + 1.96 * sd_plot)
+  mutate(ci_min = mean_plot - 1.96 * mead_sd, 
+         ci_max = mean_plot + 1.96 * mead_sd)
 
 ggplot(data = mean_plots_data_CD , 
        mapping = aes(x = time_num, y = mean_plot, group = treatment, color = treatment)) + 
