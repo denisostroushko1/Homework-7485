@@ -1,0 +1,340 @@
+---
+title: "Denis Ostroushko - HW5"
+format: 
+  pdf:
+    toc: false
+execute: 
+  echo: true
+  warning: false
+  message: false
+---
+
+
+```{r read packages }
+#| echo: false 
+#| results: hide
+#| output: false
+#| 
+total_nchar = nchar(getwd())
+remove_nchar = nchar("HW1")
+path = substr(getwd(), 1, total_nchar - remove_nchar)
+source(paste0(path,"Master Packages.R"))
+```
+
+
+
+```{r read in data}
+#| echo: false 
+data1 <- load("OPT_Study_PUBH7485_8485_2023_mediation.Rdata")
+
+# Notice that the result of this function is not assigned to an object name. When R calls load(), all of the R objects saved in the file are loaded into R. The names given to these objects when they were originally saved will be given to them when they are loaded. The command >  ls() can be used to print out all of the objects currently loaded into R.
+
+# https://higgi13425.github.io/medicaldata/reference/opt.html
+
+#     summary(data)
+```
+
+# Introduction 
+
+### Imputation and Variable Processing 
+
+For the purpose of this assignment we retain the same imputation schemes we used in the previous two assignments. 
+We will use imputation with the median of observed values and replace missing values with modes for categorical predictors. 
+
+Since we will need to create two models that have all possible confounders in the data set, we need to be careful with 
+variable inclusion. We drop variable `Hisp` because it is highly correlated with other variables that contain race and 
+ethnic information. We also `Drug.Add` due to the issues with its imputation. When imputed with the most common level 
+"No", which indicated no drug use, this variable has one unique level. Such zero variance predictors can cause problems 
+with fitting models, so we will avoid using it in our analyses. 
+
+Variables `BMI`, `BL.Cig.Day`, `BL.Drks.Day`, `N.living.kids` are imputed with medians like `N.prev.preg`, `Birthweight` in 
+the previous assignments. 
+
+`Use.Alc`  is imputed with a mode like `Race_ethnicity`, `Use.Tob`
+
+**New variable for assignment 5: `V5..BOP`:** which has 91 missing values. We will impute the variable with the median 
+of available data points. 
+
+```{r imputation and data set preparation }
+#| echo: false 
+## imputation 
+
+median_bw <- median(data$Birthweight, na.rm = T)
+median_npp <- median(data$N.prev.preg, na.rm = T)
+median_bmi <- median(data$BMI, na.rm = T)
+median_bl_cig <- median(data$BL.Cig.Day, na.rm = T)
+median_bl_drinks <- median(data$BL.Drks.Day, na.rm = T)
+median_kids <- median(data$N.living.kids, na.rm = T)
+median_bp_v5 <- median(data$V5..BOP, na.rm = T)
+# mode_drug <- 
+#   names(
+#     (table(data$Drug.Add) %>% sort())[length(table(data$Drug.Add))]
+#     )
+
+mode_alc <- 
+  names(
+    (table(data$Use.Alc) %>% sort())[length(table(data$Use.Alc))]
+    )
+
+mode_race <- 
+  names(
+    (table(data$Race_ethnicity) %>% sort())[length(table(data$Race_ethnicity))]
+    )
+
+mode_tob <- 
+  as.character(names(
+    (table(data$Use.Tob) %>% sort())[length(table(data$Use.Tob))]
+    ))
+
+data[is.na(data$Race_ethnicity), ]$Race_ethnicity <- mode_race
+data[is.na(data$Use.Tob), ]$Use.Tob <- mode_tob
+data[is.na(data$N.prev.preg), ]$N.prev.preg <- median_npp
+data[is.na(data$Birthweight), ]$Birthweight <- median_bw
+data[is.na(data$BMI), ]$BMI <- median_bmi
+data[is.na(data$BL.Cig.Day), ]$BL.Cig.Day <- median_bl_cig
+data[is.na(data$BL.Drks.Day), ]$BL.Drks.Day <- median_bl_drinks
+data[is.na(data$N.living.kids), ]$N.living.kids <- median_kids
+data[is.na(data$V5..BOP), ]$V5..BOP <- median_bp_v5
+# data[is.na(data$Drug.Add), ]$Drug.Add <- mode_drug
+data[is.na(data$Use.Alc), ]$Use.Alc <- mode_alc
+
+data <- 
+  data %>% 
+  select(-Hisp, - Drug.Add) %>% 
+  mutate(mediator  =  BL..BOP - V5..BOP) ## add a mediator variable 
+
+```
+
+**Note: I left small steps and explanations for myself for future use** 
+
+# Problem 1 
+
+### 1 - A 
+
+```{r}
+
+mediator_model <- 
+  lm(
+    mediator ~ 
+      Group + Race_ethnicity + Public.Asstce + Use.Tob + N.prev.preg + 
+      Live.PTB + BL.GE + BL..BOP + BL..PD.4 + BL..CAL.3, 
+    
+    data = data
+  )
+```
+
+### 1 - B 
+
+```{r}
+pregnancy_model <- 
+  glm(
+    `Preg.ended...37.wk` ~ Group * mediator + 
+      Race_ethnicity + Public.Asstce + Use.Tob + N.prev.preg + 
+      Live.PTB + BL.GE + BL..BOP + BL..PD.4 + BL..CAL.3, 
+    
+    data = data, 
+    family = "binomial"
+  )
+
+summary(pregnancy_model)
+```
+
+```{r}
+borthweight_model <- 
+  lm(
+    Birthweight ~ 
+    Group *(mediator + Race_ethnicity + Public.Asstce + Use.Tob + 
+              N.prev.preg + Live.PTB + BL.GE + BL..BOP + 
+              BL..PD.4 + BL..CAL.3), 
+    
+    data = data
+  )
+
+summary(borthweight_model)
+```
+
+### 1 - C 
+
+hold mediator value constant at the observed average and other values for this sample. 
+
+```{r}
+
+mediator_X_bar = mean(data$mediator) ## actually for this data averages match 
+mediator_X_bar_se = sd(data$mediator)/sqrt(nrow(data))
+
+potential_mediator_values = seq(from = mediator_X_bar - 3 * mediator_X_bar_se, 
+                                to = mediator_X_bar + 3 * mediator_X_bar_se, 
+                                by = mediator_X_bar_se)
+```
+
+
+```{r conditional cde estimator and values for estimating }
+
+cde_estimator = function(X, MODEL){
+  
+    mean(predict(object = MODEL, 
+               newdata = data %>% select(-Group, -mediator) %>% 
+                                  mutate(Group = "T", 
+                                         mediator = X), 
+               type = "response")
+         ) - 
+  
+    mean(predict(object = MODEL, 
+                 newdata = data %>% select(-Group, -mediator) %>% 
+                                    mutate(Group = "C", 
+                                           mediator = X), 
+                 type = "response")
+         ) 
+}
+
+```
+
+
+### Birthweight CDE - version 1 
+
+
+```{r birthweight cde }
+
+cde_estimator(X = mediator_model$fitted.values, MODEL = borthweight_model)
+
+cde_estimates_bw = 
+  data.frame(m = potential_mediator_values, 
+             cde = sapply(potential_mediator_values, function(X) cde_estimator(X, borthweight_model))
+               )
+
+cde_estimates_bw
+```
+
+### Birthweight CDE - Version 2 
+
+Here we get two contradicting results based on what method we use. Ask David 
+
+```{r}
+
+cde_estimator_2 = function(X, MODEL){
+  coef(MODEL)[which(names(coef(MODEL)) == "GroupT")]  + 
+    coef(MODEL)[which(names(coef(MODEL)) == "GroupT:mediator")] * X    
+}
+
+cde_estimates_bw_2 = 
+  data.frame(m = potential_mediator_values, 
+             cde = sapply(potential_mediator_values, function(X) cde_estimator_2(X, borthweight_model))
+               )
+
+cde_estimates_bw_2
+```
+
+```{r}
+
+cde_estimator_3 = function(X, MODEL){
+  mean(
+    coef(MODEL)[which(names(coef(MODEL)) == "GroupT")]  + 
+      coef(MODEL)[which(names(coef(MODEL)) == "GroupT:mediator")] * X    
+  )
+}
+
+cde_estimates_bw_3 = 
+  data.frame(
+             cde = cde_estimator_3(X = mediator_model$fitted.values, # data$mediator,  -- same results 
+                                   MODEL = borthweight_model)
+               )
+
+cde_estimates_bw_3
+```
+
+```{r}
+all_bw_comparison = 
+  cde_estimates_bw_2 %>% 
+    rename(method_2_cde = cde) %>% 
+  left_join(cde_estimates_bw %>% 
+              rename(method_1_cde = cde), 
+            by = "m")
+
+all_bw_comparison
+ 
+```
+
+
+### Birthweight NIE 
+
+```{r}
+
+nie_method_1 = function(X, OUTCOME_MODEL, MEDIATOR_MODEL){
+  
+  mediator_under_trt <-  
+    predict(object = MEDIATOR_MODEL, 
+            newdata = data %>% select(-Group, -mediator) %>% 
+                                mutate(Group = "T")
+            )
+  
+  outcome_under_trt <- 
+    predict(object = OUTCOME_MODEL, 
+            newdata = data %>% select(-Group, -mediator) %>% 
+                                mutate(Group = "T", 
+                                       mediator = mediator_under_trt)
+            )
+  
+  
+  mediator_under_no_trt <-  
+    predict(object = MEDIATOR_MODEL, 
+            newdata = data %>% select(-Group, -mediator) %>% 
+                                mutate(Group = "C")
+            )
+  
+  outcome_under_no_trt <- 
+    predict(object = OUTCOME_MODEL, 
+            newdata = data %>% select(-Group, -mediator) %>% 
+                                mutate(Group = "T", 
+                                       mediator = mediator_under_no_trt)
+            )
+  
+  effect = mean(outcome_under_trt) - mean(outcome_under_no_trt)
+  return(effect)
+}
+
+nie_results <- sapply(potential_mediator_values, 
+                      function(X) nie_method_1(X, borthweight_model, mediator_model))
+
+
+```
+
+```{r}
+
+nie_method_2 = function(X, OUTCOME_MODEL, MEDIATOR_MODEL){
+  
+  coef(OUTCOME_MODEL)[which(names(coef(OUTCOME_MODEL)) == "mediator")] * 
+    coef(MEDIATOR_MODEL)[which(names(coef(MEDIATOR_MODEL)) == "GroupT")] +
+    
+  coef(OUTCOME_MODEL)[which(names(coef(OUTCOME_MODEL)) == "GroupT:mediator")] * 
+    coef(MEDIATOR_MODEL)[which(names(coef(MEDIATOR_MODEL)) == "GroupT")] 
+    
+}
+
+
+nie_results_2 <- sapply(potential_mediator_values, 
+                      function(X) nie_method_2(X, borthweight_model, mediator_model))
+
+all_bw_nie_results = 
+  data.frame(m = potential_mediator_values, 
+             nie_method_1 = nie_results, 
+             nie_method_2 = nie_results_2)
+
+all_bw_nie_results
+```
+
+```{r}
+#| eval: false 
+mediation_model <- mediate(
+  model.y = borthweight_model,
+  model.m = mediator_model,
+  treat = "Group",
+  mediator = "mediator",
+  robustSE = TRUE  # Optional, for robust standard errors
+)
+
+summary(mediation_model)
+
+summary(mediation_model)$ADE
+summary(mediation_model)$NIE
+
+```

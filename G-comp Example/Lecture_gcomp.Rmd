@@ -1,0 +1,559 @@
+---
+title: "G-computation formula"
+author: "David M. Vock"
+date: "PubH 7485/8485"
+output: beamer_presentation
+theme: "Boadilla"
+colortheme: "whale"
+fonttheme: "structurebold"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+def.chunk.hook  <- knitr::knit_hooks$get("chunk")
+knitr::knit_hooks$set(chunk = function(x, options) {
+  x <- def.chunk.hook(x, options)
+  ifelse(options$size != "normalsize", paste0("\\", options$size,"\n\n", x, "\n\n \\normalsize"), x)
+})
+library(dplyr)
+library(data.table)
+library(Hmisc)
+
+mu0 <- 6.2
+beta1 <- 1.6
+beta2 <- -0.23
+beta3 <- -0.175
+beta4 <- -0.5
+sigma0 <- sigma <- 0.35
+gamma0 <- -3.21
+gamma1 <- 0.80
+
+eta0 <- 3.68
+eta1 <- -0.58
+eta2 <- -1.18
+
+n <- 1000
+
+expit <- function(x) {
+  expit <- exp(x)/(1 + exp(x))
+  return(expit)
+}
+
+set.seed(1101985)
+
+R0 <- rep(0, n)
+logCD40 <- rnorm(n, mu0, sigma0)
+A0<- rbinom(n, 1, expit(eta0 + eta1*logCD40 + eta2*R0))
+cumA0 <- A0
+
+R1 <- rbinom(n, 1, expit(gamma0 + gamma1*cumA0))*(cumA0 > 0 & R0 == 0) + 0*(cumA0 == 0) + 1*(R0 == 1) 
+logCD41 <- logCD40 + rnorm(n, (beta1*A0 + beta2*A0*logCD40 + beta3*(1-A0))*(1-R1) + beta4*R1, sigma)
+A1 <- rbinom(n, 1, expit(eta0 + eta1*logCD41 + eta2*R1))
+cumA1 <- A0 + A1
+
+R2 <- rbinom(n, 1, expit(gamma0 + gamma1*cumA1))*(cumA1 > 0 & R1 == 0) + 0*(cumA1 == 0) + 1*(R1 == 1) 
+logCD42 <- logCD41 + rnorm(n, (beta1*A1 + beta2*A1*logCD41 + beta3*(1-A1))*(1-R2) + beta4*R2, sigma)
+A2 <- rbinom(n, 1, expit(eta0 + eta1*logCD42 + eta2*R2))
+cumA2 <- A0 + A1 + A2
+
+R3 <- rbinom(n, 1, expit(gamma0 + gamma1*cumA2))*(cumA2 > 0 & R2 == 0) + 0*(cumA2 == 0) + 1*(R2 == 1) 
+logCD43 <- logCD42 + rnorm(n, (beta1*A2 + beta2*A2*logCD42 + beta3*(1-A2))*(1-R3) + beta4*R3, sigma)
+A3 <- rbinom(n, 1, expit(eta0 + eta1*logCD43 + eta2*R3))
+cumA3 <- A0 + A1 + A2 + A3
+
+R4 <- rbinom(n, 1, expit(gamma0 + gamma1*cumA3))*(cumA3 > 0 & R3 == 0) + 0*(cumA3 == 0) + 1*(R3 == 1) 
+logCD44 <- logCD43 + rnorm(n, (beta1*A3 + beta2*A3*logCD43 + beta3*(1-A3))*(1-R4) + beta4*R4, sigma)
+
+dataHW3 <- data.frame(ID = 1:n, R0 = R0, CD40 = exp(logCD40), A0 = A0,
+  R1 = R1, CD41 = exp(logCD41), A1 = A1,
+  R2 = R2, CD42 = exp(logCD42), A2 = A2,
+  R3 = R3, CD43 = exp(logCD43), A3 = A3,
+  R4 = R4, CD44 = exp(logCD44))
+```
+
+# G-computation Algorithm
+
+## Model Entire Longitudinal Process 
+
+- In theory, under appropriate assumptions (consistency and sequential randomization assignment), then 
+\begin{eqnarray}
+& & P(Y^{\overline{a}_M} = y, L_{M}^{\overline{a}_{M-1}} = l_{M}, \ldots, L_0 = l_0)  =   \\
+& & P(Y = y | \overline{L}_M = \overline{l}_M, \overline{A}_M = \overline{a}_M) \\
+& \times & P(L_M = l_M | \overline{L}_{M-1} = \overline{l}_{M -1}, \overline{A}_{M-1} = \overline{a}_{M - 1}) \\
+& \times & \vdots \\
+& \times & P(L_0 = l_0)
+\end{eqnarray}
+- That is, the distribution of the potential outcome (and any summary measure of the this distribution like the mean) is identified from the observed data under appropriate assumptions
+
+## (Parametric) G-computation Algorithm
+
+- NOTE: note to be confused with G-estimation (yes the people smart enough to come up with these techniques gave them very similar names)
+- To do the (Parametric) G-computation algorithm in practice we could proceed as follows.
+
+1) Posit models for the conditional densities
+
+$P_{L_j |\overline{L}_{j-1}, \overline{A}_{j-1}}(l_j|\overline{l}_{j-1}, \overline{a}_{j-1}; \psi_j)$ for $j = 1, \ldots, M$
+
+$P_{L_0}(l_0; \psi_0)$
+
+$P_{Y |\overline{L}_{M}, \overline{A}_{M}}(y|\overline{l}_{M}, \overline{a}_{M}; \psi_{M+1})$
+
+in terms of the parameters $(\psi_0, \ldots, \psi_{M+1})$ where $\psi_j$ may be a vector of parameters. Note that some of these parameters could be shared across different time points
+
+## (Parametric) G-computation Algorithm
+
+
+2) Obtain parameter estimates using least squares/maximum likelihood using standard software
+
+3) Integrating out the $L's$ analytically would likely be prohibitive. Therefore, we could approximate the distribution of $Y^{\overline{a}}$ for any $\overline{a}$ of interest using Monte Carlo integration. Specifically, for $r = 1, \ldots, K$ (number of simulations), fix $\overline{a}$ and then 
+
+i) generate a random $l_{0r}$ from $P_{L_0}(l_0; \hat{\psi}_0)$
+
+ii) generate a random $l_{1r}$ from $P_{L_1 |L_{0}, A_{0}}(l_1|l_{0r}, a_0; \hat{\psi}_1)$
+
+iii) generate a random $l_{jr}$ from $P_{L_j |\overline{L}_{j-1}, \overline{A}_{j-1}}(l_j|\overline{l}_{j-1,r}, \overline{a}_{j-1}; \hat{\psi}_j)$ for $j = 2, \ldots, M$
+
+iv) generate a random $y_{r}$ from $P_{Y |\overline{L}_{M}, \overline{A}_{M}}(y|\overline{l}_{M,r}, \overline{a}_{M}; \hat{\psi}_{M+1})$
+
+## (Parametric) G-computation Algorithm
+
+- The $y_r$ for $r = 1, \ldots, K$ derived this way represent random draws from the marginal distribution of $Y^{\overline{a}}$.
+- For example, we could estimate $E\{Y^{\overline{a}}\}$ by $\frac{1}{K} \sum_{r=1}^K y_r$
+- We are then able to compare different treatment combinations in this fashion
+- Standard errors could be estimated using the bootstrap. Note that there are two "Monte Carlo" steps here - for the bootstrap and the integration
+
+## G computation Overview
+
+- Essentially, we are trying to estimate the distribution of some outcome by modeling the entire longitudinal covariate process 
+- This requires fitting a whole bunch of models each of which has to be "right" in order to consistently estimate the distribution of the response under different treatment assignment patterns
+- Note that we actually have to correctly specify the correct conditional distribution (not just the conditional mean) for each AND remember $L_j$ could be multidimensional
+- For this reason, this approach has not been preferred in the literature (and frequently go by other names like "micro simulation")
+- Note that we do NOT have to model the treatment assignment
+
+
+
+
+## Modeling Assumptions
+
+- $lCD4_0 \sim N(\mu_0, \sigma_0^2)$
+- $lCD4_j | \overline{R}_j, \overline{lCD4}_{j-1}, \overline{A}_{j-1} \sim N(\beta_0 + \beta_1lCD4_{j-1} + \beta_2A_{j-1} + \beta_3R_j + \beta_4lCD4_{j-1}A_{j-1} + \beta_5lCD4_{j-1}R_{j} + \beta_6A_{j-1}R_j + \beta_7lCD4_{j-1}A_{j-1}R_{j}, \sigma^2)$
+- $P(R_j = 1 | \overline{R}_{j-1}, \overline{lCD4}_{j-1}, \overline{A}_{j-1}) = \frac{\gamma_0+\gamma_1cum(\overline{A}_{j-1})}{1+\gamma_0+\gamma_1cum(\overline{A}_{j-1})}$ if $R_{j-1} = 0$ and $cum(\overline{A}_{j-1}) >0$, $= 1$ if  $R_{j-1} = 1$ and $=0 if $cum(\overline{A}_{j-1}) = 0$ 
+- where $cum(\overline{A}_{j-1}) = \sum_{l=1}^{j-1}A_l$
+
+## Modeling Assumptions
+- In this example, parameters are shared across decision points
+- Linear regression model for $lCD4_j$ with covariates $lCD4_{j-1}, A_{j-1}, R_j$ and their two- and three-way interactions
+- Logistic regression model for $R_j$ with covariates $cum(\overline{A}_{j-1})$ among those with $R_{j-1} = 0$ and $cum(\overline{A}_{j-1}) >0$
+
+## Estimating the Parameters in the CD4 Model
+
+- In this example, parameters are shared across decision points
+- We can estimate $\mu_0$ and $\sigma_0^2$ using data from the baseline visit
+- We can estimate $\beta_0, \ldots \beta_7$ and $\sigma^2$ using linear regression and stacking data from multiple time points across multiple subjects together. Specifically, the dataset would have  $(M+1)n$ rows with "response" variable $(lCD4_{1i}, \ldots lCD4_{M+1,i})_{i=1,\ldots,n}$. The predictors corresponding to $lCD4_{ji}$ would be $lCD4_{j-1,i}, A_{j-1, i}, R_{ji}$ and their two- and three-way interactions. 
+
+## Estimating the Parameters in the CD4 Model
+
+```{r, echo = FALSE, cache = TRUE, message = FALSE, warning = FALSE, size = "small"}
+# create log CD4 values
+dataHW3 <- mutate(dataHW3,
+	logCD40 = log(CD40),
+	logCD41 = log(CD41),
+	logCD42 = log(CD42),
+	logCD43 = log(CD43),
+	logCD44 = log(CD44)
+	)
+
+# get estimates of mu0 and sigma0
+mu0 <- mean(dataHW3$logCD40)
+sigma0 <- sd(dataHW3$logCD40)
+
+# transform into long dataset
+dataHW3_long <- melt(setDT(dataHW3), id = 1L,
+	measure = patterns("^logCD4", "^CD4", "^R", "^A"),
+	value.name = c("logCD4", "CD4", "R", "A"))
+dataHW3_long <- data.frame(dataHW3_long)
+dataHW3_long <- dataHW3_long[order(dataHW3_long$ID), ]
+dataHW3_long <- 
+	dataHW3_long %>%
+	group_by(ID) %>%
+	mutate(lag_logCD4 = lag(logCD4, n = 1, default = NA),
+		lag_A = lag(A, n = 1, default = NA),
+		cum_A = cumsum(A),
+		lag_cum_A = lag(cum_A, n = 1, default = NA),
+		lag_R = lag(R, n = 1, default = NA))
+
+dataHW3_long <- mutate(dataHW3_long,
+	time = as.numeric(variable) - 1,
+	logCD4_diff = logCD4 - lag_logCD4)
+
+# When estimating the model for change in log CD4 count and developing 
+# resistance, only need data from time points 1-4 (not time point 0).
+
+dataHW3_long_t0 <- filter(dataHW3_long, time > 0)
+
+# Estimate parameters in the model for change in CD4
+
+m1 <- lm(logCD4 ~ lag_logCD4 + lag_A + R +
+		lag_logCD4*lag_A + lag_logCD4*R + 
+		lag_A*R + lag_logCD4*lag_A*R, data = dataHW3_long_t0)
+
+round(summary(m1)$coefficients, digits = 2)
+```
+
+
+## Estimating the Parameters in the Resistance Model
+
+- In this example, parameters are shared across decision points
+- The parameters $(\gamma_0, \gamma_1)$ can be estimated using standard logistic regression model software
+- Outcome would be $R_{ji}$ for all $i,j$ where $cum(\overline{A}_{j-1,i})>0$ and $R_{j-1,i} = 0$
+
+## Estimating the Parameters in the Resistance Model
+
+```{r, echo = FALSE, cache = TRUE}
+# Estimate parameters in the model for resistance
+# Remember subjects who have no prior exposure to treatment will not be
+# resistant and subjects who previously developed resistance are guaranteed
+# to be resistant. Neither of these groups should be included in the model.
+
+dataHW3_long_resist_model <- filter(dataHW3_long_t0, lag_R == 0 & lag_cum_A > 0)
+
+m2 <- glm(R ~ lag_cum_A, family = "binomial", 
+	data = dataHW3_long_resist_model)
+round(summary(m2)$coefficients, digits = 2)
+
+coef_estimates <- c(mu0, sigma0, coef(m1), summary(m1)$sigma, coef(m2))
+coef_names <- c("mu0", "sigma0", paste0("beta", 0:7), "sigma", 
+	paste0("gamma", 0:1))
+coef_estimates <- data.frame(Estimates = coef_estimates)
+rownames(coef_estimates) <- coef_names
+```
+
+## Estimating the Average Response
+
+- Once parameter estimates were obtained then we can estimate $E(Y^{\overline{a}})$ for any $\overline{a}$ by using the Monte Carlo methods previously described
+- Estimate the anticipated CD4 and log CD4 at 24 months under the following eight treatment sequences:
+(0, 0, 0, 0); (0, 0, 0, 1); (0, 0, 1, 1); (0, 1, 1, 1); (1, 1, 1, 1); (1, 1, 1, 0); (1, 1, 0, 0); (1, 0, 0, 0)
+
+## Estimating the Average Response
+
+```{r, echo=TRUE, warning = FALSE, cache = TRUE, size = "tiny"}
+mean_response <- function(treat_sequence, coef_estimates, MC) {
+	mu0 <- coef_estimates[1]; sigma0 <- coef_estimates[2]
+	beta0 <- coef_estimates[3]; beta1 <- coef_estimates[4]; beta2 <- coef_estimates[5]; 
+	beta3 <- coef_estimates[6]; beta4 <- coef_estimates[7];
+	beta5 <- coef_estimates[8]; beta6 <- coef_estimates[9];
+	beta7 <- coef_estimates[10]; 
+	
+	sigma <- coef_estimates[11];gamma0 <- coef_estimates[12];gamma1 <- coef_estimates[13]
+	
+		R0 <- rep(0, MC)
+		logCD40 <- rnorm(MC, mu0, sigma0)
+		A0 <- rep(treat_sequence[1], MC)
+		cumA0 <- A0
+		R1 <- rbinom(MC, 1, expit(gamma0 + gamma1*cumA0))*(cumA0 > 0 & R0 == 0) + 
+			0*(cumA0 == 0) + 1*(R0 == 1) 
+		logCD41 <- beta0 + beta1*logCD40 + beta2*A0 + beta3*R1 + 
+			beta4*logCD40*A0 + beta5*logCD40*R1 + beta6*A0*R1 + beta7*logCD40*A0*R1 + 
+			rnorm(MC, 0, sigma)
+		A1 <- rep(treat_sequence[2], MC)
+		cumA1 <- A0 + A1
+		R2 <- rbinom(MC, 1, expit(gamma0 + gamma1*cumA1))*(cumA1 > 0 & R1 == 0) + 
+			0*(cumA1 == 0) + 1*(R1 == 1) 
+		logCD42 <-  beta0 + beta1*logCD41 + beta2*A1 + beta3*R2 + 
+			beta4*logCD41*A1 + beta5*logCD41*R2 + beta6*A1*R2 + beta7*logCD41*A1*R2 + 
+			rnorm(MC, 0, sigma)
+		A2 <- rep(treat_sequence[3], MC)
+		cumA2 <- A0 + A1 + A2
+		R3 <- rbinom(MC, 1, expit(gamma0 + gamma1*cumA2))*(cumA2 > 0 & R2 == 0) + 
+			0*(cumA2 == 0) + 1*(R2 == 1) 
+		logCD43 <- beta0 + beta1*logCD42 + beta2*A2 + beta3*R3 + 
+			beta4*logCD42*A2 + beta5*logCD42*R3 + beta6*A2*R3 + beta7*logCD42*A2*R3 + 
+			rnorm(MC, 0, sigma)
+		A3 <- rep(treat_sequence[4], MC)
+		cumA3 <- A0 + A1 + A2 + A3
+		R4 <- rbinom(MC, 1, expit(gamma0 + gamma1*cumA3))*(cumA3 > 0 & R3 == 0) + 
+			0*(cumA3 == 0) + 1*(R3 == 1) 
+		logCD44 <-  beta0 + beta1*logCD43 + beta2*A3 + beta3*R4 + 
+			beta4*logCD43*A3 + beta5*logCD43*R4 + beta6*A3*R4 + beta7*logCD43*A3*R4 + 
+			rnorm(MC, 0, sigma)
+		
+	mean_response <- c(mean(logCD44), mean(exp(logCD44)))
+	names(mean_response) <- c("mean_logCD4", "mean_CD4")
+	return(mean_response)
+}
+
+trt_sequences <- list(
+	c(0, 0, 0, 0),
+	c(0, 0, 0, 1),
+	c(0, 0, 1, 1),
+	c(0, 1, 1, 1),
+	c(1, 1, 1, 1),
+	c(1, 1, 1, 0),
+	c(1, 1, 0, 0),
+	c(1, 0, 0, 0)
+)
+set.seed(8172013)
+mean_trt_response <- sapply(trt_sequences, mean_response, 
+	coef_estimates = as.vector(coef_estimates[, 1]), MC = 100000)	
+mean_trt_response <- t(mean_trt_response)
+rownames(mean_trt_response) <- c("(0, 0, 0, 0)",
+	"(0, 0, 0, 1)",
+	"(0, 0, 1, 1)",
+	"(0, 1, 1, 1)",
+	"(1, 1, 1, 1)",
+	"(1, 1, 1, 0)",
+	"(1, 1, 0, 0)",
+	"(1, 0, 0, 0)")
+#print(mean_trt_response, digits = 3)
+```
+
+## Estimating the Average Response
+
+```{r, echo= FALSE, cache = TRUE}
+print(mean_trt_response, digits = 3)
+```
+
+## Bootstrap to Estimate SE
+
+```{r, echo=FALSE, warning = FALSE, cache = TRUE}
+dataHW3_orig <- dataHW3
+n <- nrow(dataHW3_orig)
+boot <- 50
+
+mean_trt_response_boot <- array(0, dim = c(8, 2, boot))
+for(j in 1:boot) {
+	dataHW3 <- dataHW3_orig[sample(1:n, n, replace = TRUE), ]
+	
+	# get estimates of mu0 and sigma0
+	mu0 <- mean(dataHW3$logCD40)
+	sigma0 <- sd(dataHW3$logCD40)
+
+	dataHW3$ID <- 1:n
+	dataHW3_long <- melt(setDT(dataHW3), id = 1L,
+		measure = patterns("^logCD4", "^CD4", "^R", "^A"),
+		value.name = c("logCD4", "CD4", "R", "A"))
+	dataHW3_long <- data.frame(dataHW3_long)
+	dataHW3_long <- dataHW3_long[order(dataHW3_long$ID), ]
+	dataHW3_long <- 
+		dataHW3_long %>%
+		group_by(ID) %>%
+		mutate(lag_logCD4 = lag(logCD4, n = 1, default = NA),
+			lag_A = lag(A, n = 1, default = NA),
+			cum_A = cumsum(A),
+			lag_cum_A = lag(cum_A, n = 1, default = NA),
+			lag_R = lag(R, n = 1, default = NA))
+	
+	dataHW3_long <- mutate(dataHW3_long,
+		time = as.numeric(variable) - 1,
+		logCD4_diff = logCD4 - lag_logCD4)
+	dataHW3_long_t0 <- filter(dataHW3_long, time > 0)
+	
+	m1 <- lm(logCD4 ~ lag_logCD4 + lag_A + R +
+		lag_logCD4*lag_A + lag_logCD4*R + 
+		lag_A*R + lag_logCD4*lag_A*R, data = dataHW3_long_t0)
+	
+	dataHW3_long_resist_model <- filter(dataHW3_long_t0, lag_R == 0 & lag_cum_A > 0)
+	
+	m2 <- glm(R ~ lag_cum_A, family = "binomial", 
+		data = dataHW3_long_resist_model)
+	
+	coef_estimates <- c(mu0, sigma0, coef(m1), summary(m1)$sigma, coef(m2))
+	
+	mean_trt_response <- sapply(trt_sequences, mean_response, 
+		coef_estimates = coef_estimates, MC = 100000)	
+	mean_trt_response <- t(mean_trt_response)
+	
+	mean_trt_response_boot[, , j] <- mean_trt_response 
+}
+
+se <- apply(mean_trt_response_boot, c(1, 2), sd)
+rownames(se) <- c("(0, 0, 0, 0)",
+	"(0, 0, 0, 1)",
+	"(0, 0, 1, 1)",
+	"(0, 1, 1, 1)",
+	"(1, 1, 1, 1)",
+	"(1, 1, 1, 0)",
+	"(1, 1, 0, 0)",
+	"(1, 0, 0, 0)")
+colnames(se) <- c("SE_logCD4", "SE_CD4")
+print(se, digits = 2)
+```
+
+
+## The gfoRmula Package 
+- A very new R Package for estimating the effects of sustained treatment strategies via the parametric g-formula that can be installed from CRAN: 
+```{r, eval=TRUE}
+library(gfoRmula)
+```
+
+- More information and examples can be found in the following paper: 
+
+McGrath, S., Lin, V., Zhang, Z., Petito, L. C., Logan, R. W., Hernán, M. A., & Young, J. G. (2020). gfoRmula: An R Package for Estimating the Effects of Sustained Treatment Strategies via the Parametric g-formula. Patterns, 1(3), 100008. doi:https://doi.org/10.1016/j.patter.2020.100008
+
+
+## Recall G-Computation from class
+- We have a time varying treatment as opposed to a treatment that was given at a single time point, and we would like to estimate the mean treatment response. 
+- Traditional methods don't take into account causal effects. What is the problem if only baseline covariates and treatment history are included in a model? What if all the covariate history and treatment history were included?
+- With G-computation, we are trying to estimate the distribution of some outcome by modeling the entire longitudinal covariate process. 
+- This requires fitting a whole bunch of models each of which has to be “right” in order to consistently estimate the distribution of the response under different treatment assignment patterns
+- Note that we actually have to correctly specify the correct conditional distribution (not just the conditional mean) for each AND remember Lj (covariates) could be multidimensional
+
+
+## Package Overview
+- The gfoRmula R package has many of the capabilities of the GFORMULA SAS macro, as well some overlapping capabilities described for the gformula command in Stata, to implement the parametric g-formula.
+
+- The package allows for: 
+  1. Binary or continuous/multilevel time-varying treatments.
+  2. Different types of outcomes (survival or continuous/binary end of follow-up).
+  3. Data with competing events (survival outcomes) and loss to follow-up.
+  4. Joint interventions on multiple treatments and other options.
+
+- The main function of the package is the `gformula` function, which we will look at in detail today. 
+
+## Required Structure of the Input Dataset
+- The input dataset to the gformula function must be an R data.table. For all outcome types, the input dataset should contain one record for each follow-up time $k$ for each subject present at baseline (specified by the parameter id). The time index $k$ must start at 0 (indexing baseline) and increase in increments of 1. Each column of the dataset will index one of $p$ time-varying covariates $Z_{j,k}$, $j=1,...,p$. Additional columns will contain values of time-fixed baseline confounders (e.g., race, sex) with values repeated on each line $k$ for that subject in the dataset.
+
+- We will be using an example dataset included in the gfoRmula package, consisting of 17,500 observations on 2,500 individuals over 7 time points. Each row in the dataset corresponds to the record of one individual at one time point:
+
+## Required Structure of the Input Dataset
+```{r}
+data(continuous_eofdata)
+head(as.data.frame(continuous_eofdata), n=7)
+```
+
+## Required Structure of the Input Dataset
+- The columns in this dataset are:\
+**t0** - Time index. \
+**id** - Unique identifier for each individual. \
+**L1** - Categorical time-varying covariate.\
+**L2** - Continuous time-varying covariate.\
+**L3** - Continuous baseline covariate. Baseline values are repeated at each time point for each individual.\
+**A** - Binary treatment variable.\
+**Y** - Continuous outcome of interest. Because this outcome is only defined at the end of follow-up,
+values of NA are given in all other time points.
+
+- It's very important to have your data in this specific format for the package to work correctly!
+
+## Inputs for gformula 
+Some of the inputs are pretty straightforward: 
+
+```{r, echo = TRUE, eval = FALSE}
+gform_cont_eof <- gformula(obs_data = continuous_eofdata,
+                           id = 'id', 
+                           time_name = 't0',
+                           covnames = c('L1', 'L2', 'A'), 
+                           covtypes = c('categorical', 'normal', 'binary'),
+                           outcome_name = 'Y',
+                           outcome_type = 'continuous_eof', 
+                           basecovs = c("L3"), 
+                           nsimul = 10000, seed = 1234,
+                           ...)
+```
+
+
+## Generating Covariate Histories
+
+- The arguments `histories` and `histvars` must be used to specify any desired functions of history that will be used for estimation. 
+- The precoded functions for `histories` include: 
+  1. `lagged` adds a variable to the specified input dataset named lagi_Zj, containing the ith lag of Zj relative to the current follow-up time. 
+  2. `cumavg` adds a variable to the specified input dataset named cumavg_Zj, which contains the cumulative average of Zj up until the current follow-up time. 
+  3. `lagavg` adds a variable to the specified input dataset named lag_cumavgi_Zj, which contains the ith lag of the cumulative average of Zj relative to the current follow-up time.
+- For example, from the code below, we are adding the columns of "lag1_A", "lag2_A",...,"lag7_A", "lag1_L1",..., 
+"lag7_L1", "lag1_L2",..., "lag7_L2" to the dataset: 
+
+
+## Specifying Covariate and Outcome Models
+- Both `covmodels` and `ymodel` take R model statements as inputs. 
+- The model statement is passed to an appropriate modeling function based on the `covtypes` and `outcome_type` previously specified. (ex. glm with gaussian family and identity link for continuous outcomes...)
+
+```{r, echo = TRUE, eval = FALSE}
+covparams <- list(covmodels = c(L1 ~ lag1_A + lag1_L1 + L3 + t0 + 
+    rcspline.eval(lag1_L2, knots = c(-1, 0, 1)),
+  L2 ~ lag1_A + L1 + lag1_L1 + lag1_L2 + L3 + t0,
+  A ~ lag1_A + L1 + L2 + lag1_L1 + lag1_L2 + L3 + t0))
+ymodel <- Y ~ A + L1 + L2 + lag1_A + lag1_L1 + lag1_L2 + L3
+```
+
+## Specifying the Interventions
+- The arguments `intvars`, `interventions`, and `int_times` are jointly used to define the user-specified treatment interventions to be compared.
+- `intvars` is a list of vectors. The number of vector elements of this list should be the number of user-specified interventions of interest. 
+- `interventions` is a list, whose elements are lists of vectors. Each list in interventions specifies a
+unique intervention on the relevant variable(s) in intvars. Each vector contains a function implementing a particular intervention on a single variable, optionally followed by one or more "intervention values" (i.e., integers used to specify the treatment regime).
+- `int_descript` is a vector of character strings, each describing an intervention. 
+
+## Specifying the Interventions
+- For example, to compare two static interventions on a binary time-varying covariate A that sets this variable to 0 at all follow-up times versus 1 at all follow-up times:
+
+```{r, echo = TRUE, eval = FALSE}
+intvars <- list('A', 'A')
+interventions <- list(list(c(static, rep(0, 7))), list(c(static, rep(1, 7))))
+int_descript <- c('Never treat', 'Always treat')
+```
+
+
+## Putting it all together
+```{r, size = "tiny", cache = TRUE, echo = TRUE}
+covparams <- list(covmodels = c(L1 ~ lag1_A + lag1_L1 + L3 + t0 + 
+    rcspline.eval(lag1_L2, knots = c(-1, 0, 1)),
+  L2 ~ lag1_A + L1 + lag1_L1 + lag1_L2 + L3 + t0,
+  A ~ lag1_A + L1 + L2 + lag1_L1 + lag1_L2 + L3 + t0))
+ymodel <- Y ~ A + L1 + L2 + lag1_A + lag1_L1 + lag1_L2 + L3
+intvars <- list('A', 'A')
+interventions <- list(list(c(static, rep(0, 7))), list(c(static, rep(1, 7))))
+int_descript <- c('Never treat', 'Always treat')
+
+gform_cont_eof <- gformula(obs_data = continuous_eofdata,
+  id = 'id', time_name = 't0',
+  covnames = c('L1', 'L2', 'A'), outcome_name = 'Y',
+  outcome_type = 'continuous_eof', 
+  covtypes = c('categorical', 'normal', 'binary'),
+  histories = c(lagged), histvars = list(c('A', 'L1', 'L2')),
+  covparams = covparams, ymodel = ymodel,
+  intvars = intvars, interventions = interventions,
+  int_descript = int_descript,
+  basecovs = c("L3"), nsimul = 10000, seed = 1234)
+```
+
+## Outputs for gformula
+From our example of a continuous end-of-follow-up outcome, we get this output table of estimated mean outcome, mean difference, and mean ratio for all interventions (including natural course) at the last time point:
+```{r, size = "tiny", cache = TRUE, echo = TRUE}
+gform_cont_eof
+```
+
+
+## Bootstrapping
+The gformula function also allows for easy bootstrapping:
+```{r, size = "tiny", cache = TRUE, echo = TRUE}
+#ncores <- parallel::detectCores()-1
+gform_cont_eof_b <- gformula(obs_data = continuous_eofdata,
+  id = 'id', time_name = 't0',
+  covnames = c('L1', 'L2', 'A'), outcome_name = 'Y',
+  outcome_type = 'continuous_eof', covtypes = c('categorical', 'normal', 'binary'),
+  histories = c(lagged), histvars = list(c('A', 'L1', 'L2')),
+  covparams = covparams, ymodel = ymodel,
+  intvars = intvars, interventions = interventions,
+  int_descript = int_descript,
+  basecovs = c("L3"), nsimul = 10000, seed = 1234,
+  parallel = FALSE, nsamples = 10,)
+```
+Note: I'm using 10 bootstrap samples for this example, but you should probably use more in a real case. 
+
+
+## Bootstrapped Outputs
+
+The output reports parametric g-formula estimates of the mean outcome (g-form mean) under “never treat”, the “always treat” , and the natural course. It also reports nonparametric estimates of the outcome mean (NP mean) under the natural course, along with 95% confidence intervals for these means and mean differences and ratios comparing each intervention with the natural course:
+```{r, size = "tiny", echo = TRUE}
+gform_cont_eof_b$result
+```
+
+## All Available Output
+
+```{r, size = "tiny", cache = TRUE, echo = TRUE}
+str(gform_cont_eof_b)
+```
+
+## Output Regression Models
+
+```{r, size = "tiny", cache = TRUE, echo = TRUE}
+gform_cont_eof_b$coeffs
+```
