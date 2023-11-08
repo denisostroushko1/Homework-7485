@@ -136,21 +136,32 @@ pregnancy_model <-
     family = "binomial"
   )
 
-summary(pregnancy_model)
+pregnancy_model_extended <- 
+  glm(
+    `Preg.ended...37.wk` ~ Group * (mediator + 
+      Race_ethnicity + Public.Asstce + Use.Tob + N.prev.preg + 
+      Live.PTB + BL.GE + BL..BOP + BL..PD.4 + BL..CAL.3), 
+    
+    data = data, 
+    family = "binomial"
+  )
+
+
+
 ```
 
 ```{r}
 borthweight_model <- 
-  lm(
+  glm(
     Birthweight ~ 
-    Group *(mediator + Race_ethnicity + Public.Asstce + Use.Tob + 
+    Group * mediator + Race_ethnicity + Public.Asstce + Use.Tob + 
               N.prev.preg + Live.PTB + BL.GE + BL..BOP + 
-              BL..PD.4 + BL..CAL.3), 
+              BL..PD.4 + BL..CAL.3, 
     
-    data = data
+    data = data, 
+    family = "gaussian"
   )
 
-summary(borthweight_model)
 ```
 
 ### 1 - C 
@@ -167,42 +178,51 @@ potential_mediator_values = seq(from = mediator_X_bar - 3 * mediator_X_bar_se,
                                 by = mediator_X_bar_se)
 ```
 
+<!--
+
+--> 
+
+<!--
+**************************************************
+** CDE ESTIMATOR FUCNTION ** 
+** AN EXAMPLE TO SHOWCASE 
+  WHEN WE EXPECT RESULTS TO MATCH AND NOT MATCH ** 
+**************************************************
+--> 
 
 ```{r conditional cde estimator and values for estimating }
 
-cde_estimator = function(X, MODEL){
+cde_estimator = function(DATA, MEDIATOR_LEVEL, MODEL){
   
     mean(predict(object = MODEL, 
-               newdata = data %>% select(-Group, -mediator) %>% 
+               newdata = DATA %>% select(-Group, -mediator) %>% 
                                   mutate(Group = "T", 
-                                         mediator = X), 
+                                         mediator = MEDIATOR_LEVEL), 
                type = "response")
          ) - 
   
     mean(predict(object = MODEL, 
-                 newdata = data %>% select(-Group, -mediator) %>% 
+                 newdata = DATA %>% select(-Group, -mediator) %>% 
                                     mutate(Group = "C", 
-                                           mediator = X), 
+                                           mediator = MEDIATOR_LEVEL), 
                  type = "response")
          ) 
 }
 
 ```
 
-
 ### Birthweight CDE - version 1 
-
 
 ```{r birthweight cde }
 
-cde_estimator(X = mediator_model$fitted.values, MODEL = borthweight_model)
+## get CDE by giving everyone average value of mediator 
 
-cde_estimates_bw = 
-  data.frame(m = potential_mediator_values, 
-             cde = sapply(potential_mediator_values, function(X) cde_estimator(X, borthweight_model))
-               )
+cde_estimator(DATA = data, 
+              MEDIATOR_LEVEL = mean(data$mediator), 
+              MODEL = borthweight_model) 
 
-cde_estimates_bw
+sapply(potential_mediator_values, function(X) cde_estimator(data, X, borthweight_model) ) 
+       
 ```
 
 ### Birthweight CDE - Version 2 
@@ -211,116 +231,328 @@ Here we get two contradicting results based on what method we use. Ask David
 
 ```{r}
 
-cde_estimator_2 = function(X, MODEL){
+cde_estimator_2 = function(MEDIATOR_LEVEL, MODEL){
   coef(MODEL)[which(names(coef(MODEL)) == "GroupT")]  + 
-    coef(MODEL)[which(names(coef(MODEL)) == "GroupT:mediator")] * X    
+    coef(MODEL)[which(names(coef(MODEL)) == "GroupT:mediator")] * MEDIATOR_LEVEL   
 }
 
-cde_estimates_bw_2 = 
-  data.frame(m = potential_mediator_values, 
-             cde = sapply(potential_mediator_values, function(X) cde_estimator_2(X, borthweight_model))
-               )
+cde_estimator_2(MEDIATOR_LEVEL = mean(data$mediator), borthweight_model)
 
-cde_estimates_bw_2
+sapply(potential_mediator_values, function(X) cde_estimator(data, X, borthweight_model) ) 
+
 ```
 
-```{r}
+<!-- 
+****************************
+** CDE ESIMATION FOR REAL **
+****************************
+--> 
 
-cde_estimator_3 = function(X, MODEL){
-  mean(
-    coef(MODEL)[which(names(coef(MODEL)) == "GroupT")]  + 
-      coef(MODEL)[which(names(coef(MODEL)) == "GroupT:mediator")] * X    
+### Actual Birthweight CDE 
+
+```{r}
+borthweight_model_extended <- 
+  glm(
+    Birthweight ~ 
+    Group * (mediator + Race_ethnicity + Public.Asstce + Use.Tob + 
+              N.prev.preg + Live.PTB + BL.GE + BL..BOP + 
+              BL..PD.4 + BL..CAL.3), 
+    
+    data = data, 
+    family = "gaussian"
   )
-}
 
-cde_estimates_bw_3 = 
-  data.frame(
-             cde = cde_estimator_3(X = mediator_model$fitted.values, # data$mediator,  -- same results 
-                                   MODEL = borthweight_model)
-               )
 
-cde_estimates_bw_3
 ```
 
 ```{r}
-all_bw_comparison = 
-  cde_estimates_bw_2 %>% 
-    rename(method_2_cde = cde) %>% 
-  left_join(cde_estimates_bw %>% 
-              rename(method_1_cde = cde), 
-            by = "m")
 
-all_bw_comparison
- 
+cde_estimator(DATA = data, MEDIATOR_LEVEL = mean(data$mediator), 
+              MODEL = borthweight_model_extended) -> bw_cde_at_mean
+
+sapply(potential_mediator_values, 
+       function(X) cde_estimator(data, X, borthweight_model_extended) )  -> bw_cdes
+
 ```
 
-
-### Birthweight NIE 
+### Actual Pregnancy CDE 
 
 ```{r}
 
-nie_method_1 = function(X, OUTCOME_MODEL, MEDIATOR_MODEL){
+cde_estimator(DATA = data, MEDIATOR_LEVEL = mean(data$mediator), MODEL = pregnancy_model)-> preg_cde_at_mean
+
+sapply(potential_mediator_values, function(X) cde_estimator(data, X, pregnancy_model_extended) )  -> preg_cdes
+
+
+```
+
+<!--
+*****************************
+** NIE ESTIMATOR FUCNTION ** 
+*****************************
+--> 
+
+```{r}
+
+nie_method_1 = function(DATA, OUTCOME_MODEL, MEDIATOR_MODEL){
   
   mediator_under_trt <-  
     predict(object = MEDIATOR_MODEL, 
-            newdata = data %>% select(-Group, -mediator) %>% 
-                                mutate(Group = "T")
+            newdata = DATA %>% select(-Group, -mediator) %>% 
+                                mutate(Group = "T"), 
+            type = "response"
             )
   
   outcome_under_trt <- 
     predict(object = OUTCOME_MODEL, 
-            newdata = data %>% select(-Group, -mediator) %>% 
+            newdata = DATA %>% select(-Group, -mediator) %>% 
                                 mutate(Group = "T", 
-                                       mediator = mediator_under_trt)
+                                       mediator = mediator_under_trt), 
+            type = "response"
             )
   
   
   mediator_under_no_trt <-  
     predict(object = MEDIATOR_MODEL, 
-            newdata = data %>% select(-Group, -mediator) %>% 
-                                mutate(Group = "C")
+            newdata = DATA %>% select(-Group, -mediator) %>% 
+                                mutate(Group = "C"), 
+            type = "response"
             )
   
   outcome_under_no_trt <- 
     predict(object = OUTCOME_MODEL, 
-            newdata = data %>% select(-Group, -mediator) %>% 
+            newdata = DATA %>% select(-Group, -mediator) %>% 
                                 mutate(Group = "T", 
-                                       mediator = mediator_under_no_trt)
+                                       mediator = mediator_under_no_trt), 
+            type = "response"
             )
   
   effect = mean(outcome_under_trt) - mean(outcome_under_no_trt)
   return(effect)
 }
+```
 
-nie_results <- sapply(potential_mediator_values, 
-                      function(X) nie_method_1(X, borthweight_model, mediator_model))
+### Birthweight NIE
 
+```{r}
+
+birthweight_nie <- nie_method_1(data, borthweight_model, mediator_model)
+
+```
+
+### Pregnancy - NIE 
+
+```{r}
+
+pregnancy_nie <- nie_method_1(data, pregnancy_model, mediator_model)
+
+```
+
+# All results 
+
+```{r}
+
+resutls_cde <- read_csv("cde_bootstrap_results.csv")
+
+cde_se <- 
+  resutls_cde %>% 
+  group_by(order) %>% 
+  summarise(boot_bw_mean = mean(cde_bw), 
+            boot_bw_se = sd(cde_bw), 
+            
+            boot_preg_mean = mean(cde_preg), 
+            boot_preg_se = sd(cde_preg)) 
+
+cde_all_results <- 
+  cbind(cde_se, 
+        data.frame(preg_cdes = preg_cdes, 
+                   bw_cdes = bw_cdes,
+                   potential_mediator_values = potential_mediator_values)
+        ) %>% 
+  mutate(
+    preg_low_ci = preg_cdes - 1.96 * boot_preg_se,
+    preg_high_ci = preg_cdes + 1.96 * boot_preg_se,
+    
+    bw_low_ci = bw_cdes - 1.96 * boot_bw_se,
+    bw_high_ci = bw_cdes + 1.96 * boot_bw_se
+  )
+```
+
+```{r}
+ggplot(data = cde_all_results, 
+       aes(x = potential_mediator_values, 
+           y = preg_cdes)) + 
+  theme_minimal() + 
+  geom_point() + 
+  geom_line() + 
+  geom_errorbar(aes(ymin = preg_low_ci, ymax = preg_high_ci), width = 0.25)
+```
+
+```{r}
+ggplot(data = cde_all_results, 
+       aes(x = potential_mediator_values, 
+           y = bw_cdes)) + 
+  theme_minimal() + 
+  geom_point() + 
+  geom_line() + 
+  geom_errorbar(aes(ymin = bw_low_ci, ymax = bw_high_ci), width = 0.25)
+```
+
+```{r}
+resutls_nie <- read_csv("nie_bootstrap_results.csv")
+```
+
+```{r}
+
+birthweight_nie 
+
+sd(resutls_nie$nie_bw)
+
+ggplot(data = resutls_nie, 
+       aes(x = nie_bw)) + 
+  theme_minimal() + 
+  geom_histogram()
+
+birthweight_nie  + 1.96 * sd(resutls_nie$nie_bw)
+birthweight_nie  - 1.96 * sd(resutls_nie$nie_bw)
 
 ```
 
 ```{r}
 
-nie_method_2 = function(X, OUTCOME_MODEL, MEDIATOR_MODEL){
+pregnancy_nie
+
+sd(resutls_nie$nie_preg)
+
+
+ggplot(data = resutls_nie, 
+       aes(x = nie_preg)) + 
+  theme_minimal() + 
+  geom_histogram()
+
+pregnancy_nie - 1.96 * sd(resutls_nie$nie_preg)
+pregnancy_nie + 1.96 * sd(resutls_nie$nie_preg)
+
+```
+
+```{r mother of bootstrap}
+#| eval: false 
+
+K = 2500 
+
+resutls_cde <- 
+  data.frame(
+    iter = integer(), 
+    order = integer(), 
+    
+    cde_bw = numeric(), 
+    cde_preg = numeric()
+  )
+
+resutls_nie <- 
+  data.frame(
+    iter = 1:K, 
+    
+    nie_bw = rep(NA,K), 
+    nie_preg = rep(NA,K) 
+  )
+
+for(i in 1:K){
+  print(i)
   
-  coef(OUTCOME_MODEL)[which(names(coef(OUTCOME_MODEL)) == "mediator")] * 
-    coef(MEDIATOR_MODEL)[which(names(coef(MEDIATOR_MODEL)) == "GroupT")] +
+  ### resample data, calculate values for other conditional effects 
+  boot_data <- data[sample(1:nrow(data), replace = T), ]
+  
+  boot_mediator_X_bar = mean(boot_data$mediator) ## actually for this data averages match 
+  boot_mediator_X_bar_se = sd(boot_data$mediator)/sqrt(nrow(boot_data))
+
+  boot_potential_mediator_values = seq(from = boot_mediator_X_bar - 3 * boot_mediator_X_bar_se, 
+                                  to = boot_mediator_X_bar + 3 * boot_mediator_X_bar_se, 
+                                  by = boot_mediator_X_bar_se)
+  
+  ### train models 
+  boot_borthweight_model_extended <- 
+    glm(
+      Birthweight ~ 
+      Group * (mediator + Race_ethnicity + Public.Asstce + Use.Tob + 
+                N.prev.preg + Live.PTB + BL.GE + BL..BOP + 
+                BL..PD.4 + BL..CAL.3), 
+      
+      data = boot_data, 
+      family = "gaussian"
+    )
+  
+  boot_pregnancy_model <- 
+    glm(
+      `Preg.ended...37.wk` ~ Group * (mediator + 
+        Race_ethnicity + Public.Asstce + Use.Tob + N.prev.preg + 
+        Live.PTB + BL.GE + BL..BOP + BL..PD.4 + BL..CAL.3), 
+      
+      data = boot_data, 
+      family = "binomial"
+    )
+  
+  boot_mediator_model <- 
+    lm(
+      mediator ~ 
+        Group + Race_ethnicity + Public.Asstce + Use.Tob + N.prev.preg + 
+        Live.PTB + BL.GE + BL..BOP + BL..PD.4 + BL..CAL.3, 
+      
+      data = boot_data
+    )
+  
+  
+  ### calculate effects 
+  
+  ### bw cde 
+  sapply(boot_potential_mediator_values, function(X) cde_estimator(boot_data, X, 
+                                                                   boot_borthweight_model_extended) ) -> bw_cde_boot
+  
+  ### pregnancy cde 
+  sapply(potential_mediator_values, function(X) cde_estimator(data, X, boot_pregnancy_model) ) -> preg_cde_boot
+  
+  ### save down cde results 
+  resutls_cde <- 
+    rbind(
+      resutls_cde, 
     
-  coef(OUTCOME_MODEL)[which(names(coef(OUTCOME_MODEL)) == "GroupT:mediator")] * 
-    coef(MEDIATOR_MODEL)[which(names(coef(MEDIATOR_MODEL)) == "GroupT")] 
-    
+      data.frame(
+        iter = i, 
+        order = seq(from = 1, to = length(boot_potential_mediator_values), by = 1), 
+        cde_bw = bw_cde_boot, 
+        cde_preg = preg_cde_boot
+      )
+    )
+  ### bw nie
+  nie_method_1(boot_data, boot_borthweight_model_extended, boot_mediator_model) -> nie_bw_boot
+  
+  ### preg nie
+  nie_method_1(boot_data, boot_pregnancy_model, boot_mediator_model) -> nie_preg_boot
+  
+  ### save down cde results 
+  resutls_nie$nie_bw[i] <- nie_bw_boot
+  resutls_nie$nie_preg[i] <- nie_preg_boot
 }
 
+beepr::beep(2)
 
-nie_results_2 <- sapply(potential_mediator_values, 
-                      function(X) nie_method_2(X, borthweight_model, mediator_model))
+write.csv(resutls_cde, "cde_bootstrap_results.csv")
+write.csv(resutls_nie, "nie_bootstrap_results.csv")
 
-all_bw_nie_results = 
-  data.frame(m = potential_mediator_values, 
-             nie_method_1 = nie_results, 
-             nie_method_2 = nie_results_2)
+summary(resutls_cde$cde_bw)
+hist(resutls_cde$cde_bw)
 
-all_bw_nie_results
+summary(resutls_cde$cde_preg)
+hist(resutls_cde$cde_bw)
+
+summary(resutls_nie$nie_bw)
+hist(resutls_nie$nie_bw)
+
+summary(resutls_nie$nie_preg)
+hist(resutls_nie$nie_preg)
+
 ```
+
 
 ```{r}
 #| eval: false 
@@ -334,7 +566,5 @@ mediation_model <- mediate(
 
 summary(mediation_model)
 
-summary(mediation_model)$ADE
-summary(mediation_model)$NIE
-
 ```
+
