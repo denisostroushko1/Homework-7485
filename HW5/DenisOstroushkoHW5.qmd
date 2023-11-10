@@ -111,6 +111,9 @@ data <-
 
 ### 1 - A 
 
+I fit a simple additive model with no interactions for expected values of mediation. 
+I provide code for the regression model in the chunk below: 
+
 ```{r}
 
 mediator_model <- 
@@ -124,6 +127,14 @@ mediator_model <-
 ```
 
 ### 1 - B 
+
+As in the previous assignments, I consider the same roster of predictors for the outcome models. 
+Note that I add mediator as a predictor of outcome now, as well as an interaction of a mediator and a 
+treatment assignment variable. I also fit *extended* version of outcome models that include 
+interaction of a group variable with mode than just mediator variable. I will provide 
+reasoning for this modeling choice later on. 
+
+Code below fits regression outcome model for the pregnancy outcome: 
 
 ```{r}
 pregnancy_model <- 
@@ -150,6 +161,8 @@ pregnancy_model_extended <-
 
 ```
 
+We also obtain outcome regression models for the birth weight outcome: 
+
 ```{r}
 borthweight_model <- 
   glm(
@@ -162,13 +175,34 @@ borthweight_model <-
     family = "gaussian"
   )
 
+borthweight_model_extended <- 
+  glm(
+    Birthweight ~ 
+    Group * (mediator + Race_ethnicity + Public.Asstce + Use.Tob + 
+              N.prev.preg + Live.PTB + BL.GE + BL..BOP + 
+              BL..PD.4 + BL..CAL.3), 
+    
+    data = data, 
+    family = "gaussian"
+  )
+
 ```
 
 ### 1 - C 
 
-hold mediator value constant at the observed average and other values for this sample. 
+In this section I first estimate *CDE* as a fucntion of some fixed mediator value using simpler, *not extended*, 
+regressio models. I do this in order to compare two approaches: 
+
+  * Approach 1: obtain regression coefficients from the outcome model for the treatment variable and 
+    interaction between mediator and outcome. Use a simple formula provided in the lecture slides: 
+    $\large CDE(m) = \theta_{treatment} + \theta_{interaction} \times m$
+    
+  * Approach 2: Holding mediator variable constand, i.e. assign the same value for everyone in the available sample of data, estiamte $\large E(Y^{1,m})$ and $\large E(Y^{0,m})$, and estimate $\large CDE(m) =  E(Y^{1,m}) - E(Y^{0,m})$
+
+Using *extended* versions of the model, approach one is no longer possible. 
 
 ```{r}
+#| echo: false 
 
 mediator_X_bar = mean(data$mediator) ## actually for this data averages match 
 mediator_X_bar_se = sd(data$mediator)/sqrt(nrow(data))
@@ -179,10 +213,6 @@ potential_mediator_values = seq(from = mediator_X_bar - 3 * mediator_X_bar_se,
 ```
 
 <!--
-
---> 
-
-<!--
 **************************************************
 ** CDE ESTIMATOR FUCNTION ** 
 ** AN EXAMPLE TO SHOWCASE 
@@ -190,7 +220,447 @@ potential_mediator_values = seq(from = mediator_X_bar - 3 * mediator_X_bar_se,
 **************************************************
 --> 
 
+Since CDE is a function of mediator, I estimate CDE for a range of possible mediator values. I consider using 
+sample mean $\pm$ 1, 2, 3 standard errors of the mean. These quantities are estimatef from the sample. 
+Mean of mediator variable is `r round(mean(data$mediator), 2)` and stardard error is
+`r round(sd(data$mediator)/sqrt(nrow(data)), 2)`. In order to flexibly estiamte 7 CDE values, I use a function. 
+You can see code for  `cde_estimator` fucntion in the appendix. 
+
+Possible values of mediator considered are printed below: 
+
+```{r}
+#| echo: false 
+potential_mediator_values %>% round(., 2)
+```
+
 ```{r conditional cde estimator and values for estimating }
+#| echo: false 
+cde_estimator = function(DATA, MEDIATOR_LEVEL, MODEL){
+  
+    mean(predict(object = MODEL, 
+               newdata = DATA %>% select(-Group, -mediator) %>% 
+                                  mutate(Group = "T", 
+                                         mediator = MEDIATOR_LEVEL), 
+               type = "response")
+         ) - 
+  
+    mean(predict(object = MODEL, 
+                 newdata = DATA %>% select(-Group, -mediator) %>% 
+                                    mutate(Group = "C", 
+                                           mediator = MEDIATOR_LEVEL), 
+                 type = "response")
+         ) 
+}
+
+
+cde_estimator_2 = function(MEDIATOR_LEVEL, MODEL){
+  coef(MODEL)[which(names(coef(MODEL)) == "GroupT")]  + 
+    coef(MODEL)[which(names(coef(MODEL)) == "GroupT:mediator")] * MEDIATOR_LEVEL   
+}
+
+```
+
+### Birthweight CDE - Approach 1 
+
+Seven $CDE$ estiamtes for each level of medaitor value usign regression coefficients are printed below: 
+
+```{r}
+#| echo: false 
+
+sapply(potential_mediator_values, function(X) cde_estimator(data, X, borthweight_model) ) 
+
+```
+
+As the average value of mediator increases, $CDE$ for birthweight increases as well. 
+
+### Birthweight CDE - Approach 2 
+
+Seven $CDE$ estiamtes for each level of medaitor value using expected values of counterfactual outcomes are 
+printed below: 
+
+```{r birthweight cde }
+#| echo: false 
+
+## get CDE by giving everyone average value of mediator 
+
+sapply(potential_mediator_values, function(X) cde_estimator(data, X, borthweight_model) ) 
+       
+```
+
+Using a differenct method, we observed the same results. 
+
+### Approach 1 and 2 summary
+
+I approached the problem of estimating $CDE$ for the birth weight outcome using simple method first because 
+this is the only setting that would enable me to verify that approach 1 and 2 procude the same result. 
+Additionally, comparison of approach 1 and 2 is only prossible here beucase we use an identify link 
+for the mean in the outcome model. Pregnancy model will use a logit link function, which will not 
+allow us to extract coefficients and plug them into the formula easily. 
+
+<!-- 
+****************************
+** CDE ESIMATION FOR REAL **
+****************************
+--> 
+
+### Birthweight CDE with Extended Outcome Model 
+
+We now employ extended version of outcome models for pregnancy and birth weight to get seven estimates of CDE. 
+We then compare birth weight CDE estimates with estiamtes from previous section. 
+
+Birth weight $CDE$ estiamtes for the two models are printed below: 
+
+```{r}
+#| echo: false
+print("Extended model based estiamtes")
+sapply(potential_mediator_values, 
+       function(X) cde_estimator(data, X, borthweight_model_extended) )
+
+print("Reduced model based estiamtes")
+sapply(potential_mediator_values, 
+       function(X) cde_estimator(data, X, borthweight_model) )
+
+sapply(potential_mediator_values, 
+       function(X) cde_estimator(data, X, borthweight_model_extended) )  -> bw_cdes
+
+```
+
+The two methods produce different values of $CDE$ estiamtes. However, as we can see, they tell the same story: 
+as the value of mediator that we control increaes, $CDE$ increases as well. 
+
+### Pregnancy CDE with Extended Outcome Model 
+
+Since pregagncy outcome model uses logit link for the mean fucntion, I only print out CDE estimates. 
+Due to the use of *expit* fucntion, exact formula of $CDE$ take on a complex form. 
+Estiamtes are printed below: 
+
+
+```{r}
+#| echo: false
+print("Extended model based estiamtes")
+sapply(potential_mediator_values, 
+       function(X) cde_estimator(data, X, pregnancy_model_extended) )
+
+print("Reduced model based estiamtes")
+sapply(potential_mediator_values, 
+       function(X) cde_estimator(data, X, pregnancy_model) )
+
+preg_cdes <- sapply(potential_mediator_values, function(X) cde_estimator(data, X, pregnancy_model_extended) )
+
+```
+
+Estimates using two version of the outcome pregnancy model produce more similar results here. 
+They also show the same trend: as the value of the mediator increases, $CDE$ decreases
+
+
+<!--
+*****************************
+** NIE ESTIMATOR FUCNTION ** 
+*****************************
+--> 
+
+```{r}
+#| echo: false 
+nie_method_1 = function(DATA, OUTCOME_MODEL, MEDIATOR_MODEL){
+  
+  mediator_under_trt <-  
+    predict(object = MEDIATOR_MODEL, 
+            newdata = DATA %>% select(-Group, -mediator) %>% 
+                                mutate(Group = "T"), 
+            type = "response"
+            )
+  
+  outcome_under_trt <- 
+    predict(object = OUTCOME_MODEL, 
+            newdata = DATA %>% select(-Group, -mediator) %>% 
+                                mutate(Group = "T", 
+                                       mediator = mediator_under_trt), 
+            type = "response"
+            )
+  
+  
+  mediator_under_no_trt <-  
+    predict(object = MEDIATOR_MODEL, 
+            newdata = DATA %>% select(-Group, -mediator) %>% 
+                                mutate(Group = "C"), 
+            type = "response"
+            )
+  
+  outcome_under_no_trt <- 
+    predict(object = OUTCOME_MODEL, 
+            newdata = DATA %>% select(-Group, -mediator) %>% 
+                                mutate(Group = "T", 
+                                       mediator = mediator_under_no_trt), 
+            type = "response"
+            )
+  
+  effect = mean(outcome_under_trt) - mean(outcome_under_no_trt)
+  return(effect)
+}
+```
+
+### Birthweight NIE
+
+I again employ function to reuse the models and get $NIE$ estiamte. This is an unconditional quantity, 
+so we will get just the one value. Birthweight NIE is given below: 
+
+```{r}
+#| echo: false 
+birthweight_nie <- nie_method_1(data, borthweight_model, mediator_model)
+birthweight_nie
+
+```
+
+### Pregnancy - NIE 
+
+Pregnancy NIE
+
+```{r}
+#| echo: false 
+
+pregnancy_nie <- nie_method_1(data, pregnancy_model, mediator_model)
+pregnancy_nie
+```
+
+# All results 
+
+```{r}
+#| echo: false 
+resutls_cde <- read_csv("cde_bootstrap_results.csv")
+
+cde_se <- 
+  resutls_cde %>% 
+  group_by(order) %>% 
+  summarise(boot_bw_mean = mean(cde_bw), 
+            boot_bw_se = sd(cde_bw), 
+            
+            boot_preg_mean = mean(cde_preg), 
+            boot_preg_se = sd(cde_preg)) 
+
+cde_all_results <- 
+  cbind(cde_se, 
+        data.frame(preg_cdes = preg_cdes, 
+                   bw_cdes = bw_cdes,
+                   potential_mediator_values = potential_mediator_values)
+        ) %>% 
+  mutate(
+    preg_low_ci = preg_cdes - 1.96 * boot_preg_se,
+    preg_high_ci = preg_cdes + 1.96 * boot_preg_se,
+    
+    bw_low_ci = bw_cdes - 1.96 * boot_bw_se,
+    bw_high_ci = bw_cdes + 1.96 * boot_bw_se
+  )
+```
+
+In this section I oresent final answers. Using bootstrap, I obtain standard errors for the estiamtes of CDE and NIE
+for each outocme. Since we obtained seven CDE estiamtes, I obtain standard error for each of the seven values. 
+
+Results are shown on @fig-bw-cde and @fig-preg-cde
+
+```{r}
+#| echo: false 
+#| label: fig-preg-cde
+#| fig-cap: "We observe similar and high variance for each level of control mediator value" 
+#| 
+ggplot(data = cde_all_results, 
+       aes(x = potential_mediator_values, 
+           y = preg_cdes)) + 
+  theme_minimal() + 
+  geom_point() + 
+  geom_line() + 
+  geom_errorbar(aes(ymin = preg_low_ci, ymax = preg_high_ci), width = 0.25) + 
+  
+  labs(x = "Mediator value", 
+       y = "Pregnancy CDE value")
+```
+
+```{r}
+#| echo: false 
+#| label: fig-bw-cde
+#| fig-cap: "We observe similar and high variance for each level of control mediator value" 
+#| 
+ggplot(data = cde_all_results, 
+       aes(x = potential_mediator_values, 
+           y = bw_cdes)) + 
+  theme_minimal() + 
+  geom_point() + 
+  geom_line() + 
+  geom_errorbar(aes(ymin = bw_low_ci, ymax = bw_high_ci), width = 0.25) + 
+  
+  labs(x = "Mediator value", 
+       y = "Birth weight CDE value")
+```
+
+And now we are ready to summarize the resutls. For each CDE result, I hold the value of mediator at the sample mean, which I stated earlier. 
+
+* Birth weight CDE at sample mean: 
+
+```{r}
+#| echo: false 
+bw_cdes[4]
+```
+
+* Birth weight CDE standard error: 
+
+```{r}
+#| echo: false 
+cde_se$boot_bw_se[4]
+```
+
+* Birth weight CDE bootstrap sampling distribution. Slightly skewed, but okay to use: 
+
+```{r}
+#| echo: false 
+ggplot(data = resutls_cde %>% filter(order == 4), 
+       aes(x = cde_bw)) + 
+  theme_minimal() + 
+  geom_histogram()
+```
+
+* Birth weight CDE 95% confidence interval: 
+
+```{r}
+#| echo: false 
+
+paste0(
+  "(", 
+  round(bw_cdes[4]  + 1.96 * cde_se$boot_bw_se[4], 2), ", ", 
+  round(bw_cdes[4]  - 1.96 * cde_se$boot_bw_se[4], 2), 
+  ")"
+)
+
+```
+
+
+* Pregnancy CDE at sample mean: 
+
+```{r}
+#| echo: false 
+preg_cdes[4]
+```
+
+* Birth weight CDE standard error: 
+
+```{r}
+#| echo: false 
+cde_se$boot_preg_se[4]
+```
+
+* Birth weight CDE bootstrap sampling distribution. Slightly skewed, but okay to use: 
+
+```{r}
+#| echo: false 
+ggplot(data = resutls_cde %>% filter(order == 4), 
+       aes(x = cde_preg)) + 
+  theme_minimal() + 
+  geom_histogram()
+```
+
+* Birth weight CDE 95% confidence interval: 
+
+```{r}
+#| echo: false 
+
+paste0(
+  "(", 
+  round(preg_cdes[4]  + 1.96 * cde_se$boot_preg_se[4], 2), ", ", 
+  round(preg_cdes[4]  - 1.96 * cde_se$boot_preg_se[4], 2), 
+  ")"
+)
+
+```
+
+
+```{r}
+#| echo: false 
+resutls_nie <- read_csv("nie_bootstrap_results.csv")
+```
+
+* Birth weight NIE: 
+
+```{r}
+#| echo: false 
+birthweight_nie 
+```
+
+* Birth weight NIE standard error: 
+```{r}
+#| echo: false 
+sd(resutls_nie$nie_bw)
+```
+
+* Bootstrap sampling distribution for the standard error estiamtion, which appears balanced. 95% normal confidence interval is appropriate to use. 
+
+```{r}
+#| echo: false 
+ggplot(data = resutls_nie, 
+       aes(x = nie_bw)) + 
+  theme_minimal() + 
+  geom_histogram()
+```
+
+* Birth weight NIE 95% normal confidence interval: 
+
+```{r}
+#| echo: false 
+
+paste0(
+  "(", 
+  round(birthweight_nie  + 1.96 * sd(resutls_nie$nie_bw), 2), ", ", 
+  round(birthweight_nie  - 1.96 * sd(resutls_nie$nie_bw), 2), 
+  ")"
+)
+
+```
+
+
+
+* Pregnancy NIE: 
+
+```{r}
+#| echo: false 
+pregnancy_nie 
+```
+
+* Birth weight NIE standard error: 
+```{r}
+#| echo: false 
+sd(resutls_nie$nie_preg)
+```
+
+* Bootstrap sampling distribution for the standard error estiamtion, which appears skewed. It might make 
+more sence to use $2.5^{th}$ and $97.5^{th}$ quantiles of this distribution to get confidence interval bounds. 
+
+```{r}
+#| echo: false 
+ggplot(data = resutls_nie, 
+       aes(x = nie_preg)) + 
+  theme_minimal() + 
+  geom_histogram()
+```
+
+* Pregnancy NIE 95% normal confidence interval: 
+
+```{r}
+#| echo: false 
+
+paste0(
+  "(", 
+  round(pregnancy_nie  + 1.96 * sd(resutls_nie$nie_preg), 2), ", ", 
+  round(pregnancy_nie  - 1.96 * sd(resutls_nie$nie_preg), 2), 
+  ")"
+)
+
+```
+
+
+\newpage 
+
+# Appendix
+
+### Functions 
+
+```{r }
 
 cde_estimator = function(DATA, MEDIATOR_LEVEL, MODEL){
   
@@ -209,88 +679,13 @@ cde_estimator = function(DATA, MEDIATOR_LEVEL, MODEL){
          ) 
 }
 
-```
-
-### Birthweight CDE - version 1 
-
-```{r birthweight cde }
-
-## get CDE by giving everyone average value of mediator 
-
-cde_estimator(DATA = data, 
-              MEDIATOR_LEVEL = mean(data$mediator), 
-              MODEL = borthweight_model) 
-
-sapply(potential_mediator_values, function(X) cde_estimator(data, X, borthweight_model) ) 
-       
-```
-
-### Birthweight CDE - Version 2 
-
-Here we get two contradicting results based on what method we use. Ask David 
-
-```{r}
-
 cde_estimator_2 = function(MEDIATOR_LEVEL, MODEL){
   coef(MODEL)[which(names(coef(MODEL)) == "GroupT")]  + 
     coef(MODEL)[which(names(coef(MODEL)) == "GroupT:mediator")] * MEDIATOR_LEVEL   
 }
 
-cde_estimator_2(MEDIATOR_LEVEL = mean(data$mediator), borthweight_model)
-
-sapply(potential_mediator_values, function(X) cde_estimator(data, X, borthweight_model) ) 
 
 ```
-
-<!-- 
-****************************
-** CDE ESIMATION FOR REAL **
-****************************
---> 
-
-### Actual Birthweight CDE 
-
-```{r}
-borthweight_model_extended <- 
-  glm(
-    Birthweight ~ 
-    Group * (mediator + Race_ethnicity + Public.Asstce + Use.Tob + 
-              N.prev.preg + Live.PTB + BL.GE + BL..BOP + 
-              BL..PD.4 + BL..CAL.3), 
-    
-    data = data, 
-    family = "gaussian"
-  )
-
-
-```
-
-```{r}
-
-cde_estimator(DATA = data, MEDIATOR_LEVEL = mean(data$mediator), 
-              MODEL = borthweight_model_extended) -> bw_cde_at_mean
-
-sapply(potential_mediator_values, 
-       function(X) cde_estimator(data, X, borthweight_model_extended) )  -> bw_cdes
-
-```
-
-### Actual Pregnancy CDE 
-
-```{r}
-
-cde_estimator(DATA = data, MEDIATOR_LEVEL = mean(data$mediator), MODEL = pregnancy_model)-> preg_cde_at_mean
-
-sapply(potential_mediator_values, function(X) cde_estimator(data, X, pregnancy_model_extended) )  -> preg_cdes
-
-
-```
-
-<!--
-*****************************
-** NIE ESTIMATOR FUCNTION ** 
-*****************************
---> 
 
 ```{r}
 
@@ -332,108 +727,7 @@ nie_method_1 = function(DATA, OUTCOME_MODEL, MEDIATOR_MODEL){
 }
 ```
 
-### Birthweight NIE
-
-```{r}
-
-birthweight_nie <- nie_method_1(data, borthweight_model, mediator_model)
-
-```
-
-### Pregnancy - NIE 
-
-```{r}
-
-pregnancy_nie <- nie_method_1(data, pregnancy_model, mediator_model)
-
-```
-
-# All results 
-
-```{r}
-
-resutls_cde <- read_csv("cde_bootstrap_results.csv")
-
-cde_se <- 
-  resutls_cde %>% 
-  group_by(order) %>% 
-  summarise(boot_bw_mean = mean(cde_bw), 
-            boot_bw_se = sd(cde_bw), 
-            
-            boot_preg_mean = mean(cde_preg), 
-            boot_preg_se = sd(cde_preg)) 
-
-cde_all_results <- 
-  cbind(cde_se, 
-        data.frame(preg_cdes = preg_cdes, 
-                   bw_cdes = bw_cdes,
-                   potential_mediator_values = potential_mediator_values)
-        ) %>% 
-  mutate(
-    preg_low_ci = preg_cdes - 1.96 * boot_preg_se,
-    preg_high_ci = preg_cdes + 1.96 * boot_preg_se,
-    
-    bw_low_ci = bw_cdes - 1.96 * boot_bw_se,
-    bw_high_ci = bw_cdes + 1.96 * boot_bw_se
-  )
-```
-
-```{r}
-ggplot(data = cde_all_results, 
-       aes(x = potential_mediator_values, 
-           y = preg_cdes)) + 
-  theme_minimal() + 
-  geom_point() + 
-  geom_line() + 
-  geom_errorbar(aes(ymin = preg_low_ci, ymax = preg_high_ci), width = 0.25)
-```
-
-```{r}
-ggplot(data = cde_all_results, 
-       aes(x = potential_mediator_values, 
-           y = bw_cdes)) + 
-  theme_minimal() + 
-  geom_point() + 
-  geom_line() + 
-  geom_errorbar(aes(ymin = bw_low_ci, ymax = bw_high_ci), width = 0.25)
-```
-
-```{r}
-resutls_nie <- read_csv("nie_bootstrap_results.csv")
-```
-
-```{r}
-
-birthweight_nie 
-
-sd(resutls_nie$nie_bw)
-
-ggplot(data = resutls_nie, 
-       aes(x = nie_bw)) + 
-  theme_minimal() + 
-  geom_histogram()
-
-birthweight_nie  + 1.96 * sd(resutls_nie$nie_bw)
-birthweight_nie  - 1.96 * sd(resutls_nie$nie_bw)
-
-```
-
-```{r}
-
-pregnancy_nie
-
-sd(resutls_nie$nie_preg)
-
-
-ggplot(data = resutls_nie, 
-       aes(x = nie_preg)) + 
-  theme_minimal() + 
-  geom_histogram()
-
-pregnancy_nie - 1.96 * sd(resutls_nie$nie_preg)
-pregnancy_nie + 1.96 * sd(resutls_nie$nie_preg)
-
-```
+### Bootstrap
 
 ```{r mother of bootstrap}
 #| eval: false 
