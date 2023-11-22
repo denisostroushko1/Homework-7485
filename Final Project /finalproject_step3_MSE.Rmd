@@ -1,0 +1,340 @@
+---
+title: 'Final Project: Step 3'
+output: html_document
+date: "2023-11-18"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+# Library ---------
+library(dplyr)
+library(gt)
+library(forcats)
+library(webshot2)
+```
+
+```{r, eval = F}
+# Read in Data ----
+# overall_result <- readRDS("~/UMN MS BIOSTATS/Causal Inference PUBH 7485/final project/step3_results/result.RDS")
+# cov.info1 <- readRDS("~/UMN MS BIOSTATS/Causal Inference PUBH 7485/final project/step3_results/cov.info1.RDS")
+result1 <- readRDS("~/UMN MS BIOSTATS/Causal Inference PUBH 7485/final project/step3_results/result1.RDS")
+result2a <- readRDS("~/UMN MS BIOSTATS/Causal Inference PUBH 7485/final project/step3_results/result2a.RDS")
+result2b <- readRDS("~/UMN MS BIOSTATS/Causal Inference PUBH 7485/final project/step3_results/result2b.RDS")
+result2c <- readRDS("~/UMN MS BIOSTATS/Causal Inference PUBH 7485/final project/step3_results/result2c.RDS")
+result3a <- readRDS("~/UMN MS BIOSTATS/Causal Inference PUBH 7485/final project/step3_results/result3a.RDS")
+result3b <- readRDS("~/UMN MS BIOSTATS/Causal Inference PUBH 7485/final project/step3_results/result3b.RDS")
+result3c <- readRDS("~/UMN MS BIOSTATS/Causal Inference PUBH 7485/final project/step3_results/result3c.RDS")
+result4a <- readRDS("~/UMN MS BIOSTATS/Causal Inference PUBH 7485/final project/step3_results/result4a.RDS")
+result4b <- readRDS("~/UMN MS BIOSTATS/Causal Inference PUBH 7485/final project/step3_results/result4b.RDS")
+result4c <- readRDS("~/UMN MS BIOSTATS/Causal Inference PUBH 7485/final project/step3_results/result4c.RDS")
+```
+
+```{r}
+
+```
+
+# Summary of result1
+```{r}
+## Summary of result1
+
+# result1: n = 1500, m = (50, 100, 150)
+result1_sum <- result1 %>%
+  mutate(
+    method = fct_recode(
+      method,
+      "Forward Selection" = "forward selection",
+      "Lasso" = "lasso",
+      "Experience Based" = "experience based",
+      "T-test" = "ttest",
+      "PCA (80% of variance)" = "pca - 80% of variance"
+    )
+  ) %>%
+  group_by(method) %>%
+  summarize(
+    ATE.pss.avg = mean(ATE.pss),
+    SE.pss.avg = mean(SE.pss),
+    lwr.pss.avg = mean(lwr.pss),
+    upr.pss.avg = mean(upr.pss),
+    ATE.ipw2.avg = mean(ATE.ipw2),
+    SE.ipw2.avg = mean(SE.ipw2),
+    lwr.ipw2.avg = mean(lwr.ipw2),
+    upr.ipw2.avg = mean(upr.ipw2),
+  ) %>%
+  mutate(n = 1500)
+```
+
+# Summary of result2
+```{r}
+## Summary of result2
+
+# result2a: n = 3000, m = 50
+# result2b: n = 3000, m = 100
+# result2c: n = 3000, m = 150
+
+result2 <- rbind(result2a, result2b, result2c)
+
+result2_sum <- result2 %>%
+  mutate(
+    method = fct_recode(
+      method,
+      "Forward Selection" = "forward selection",
+      "Lasso" = "lasso",
+      "Experience Based" = "experience based",
+      "T-test" = "ttest",
+      "PCA (80% of variance)" = "pca - 80% of variance"
+    )
+  ) %>%
+  group_by(method) %>%
+  summarize(
+    ATE.pss.avg = mean(ATE.pss),
+    SE.pss.avg = mean(SE.pss),
+    lwr.pss.avg = mean(lwr.pss),
+    upr.pss.avg = mean(upr.pss),
+    ATE.ipw2.avg = mean(ATE.ipw2),
+    SE.ipw2.avg = mean(SE.ipw2),
+    lwr.ipw2.avg = mean(lwr.ipw2),
+    upr.ipw2.avg = mean(upr.ipw2),
+  ) %>%
+  mutate(n = 3000)
+```
+# Summary of result3
+```{r}
+## Summary of result3
+
+# result3a: n = 4500, m = 50
+# result3b: n = 4500, m = 100
+# result3c: n = 4500, m = 150
+
+result3a %>%
+  group_by(n, m, s) %>%
+  count
+
+
+result3 <- rbind(result3a, result3b, result3c)
+
+result3_sum <- result3 %>%
+  mutate(
+    method = fct_recode(
+      method,
+      "Forward Selection" = "forward selection",
+      "Lasso" = "lasso",
+      "Experience Based" = "experience based",
+      "T-test" = "ttest",
+      "PCA (80% of variance)" = "pca - 80% of variance"
+    )
+  ) %>%
+  group_by(method) %>%
+  summarize(
+    ATE.pss.avg = mean(ATE.pss),
+    SE.pss.avg = mean(SE.pss),
+    lwr.pss.avg = mean(lwr.pss),
+    upr.pss.avg = mean(upr.pss),
+    ATE.ipw2.avg = mean(ATE.ipw2),
+    SE.ipw2.avg = mean(SE.ipw2),
+    lwr.ipw2.avg = mean(lwr.ipw2),
+    upr.ipw2.avg = mean(upr.ipw2),
+  ) %>%
+  mutate(n = 4500)
+```
+
+# Summary of result4
+```{r}
+## Summary of result4
+
+# result2a: n = 6000, m = 50
+# result2b: n = 6000, m = 100
+# result2c: n = 6000, m = 150
+
+result4 <- rbind(result4a, result4b, result4c)
+
+result4_sum <- result4 %>%
+  mutate(
+    method = fct_recode(
+      method,
+      "Forward Selection" = "forward selection",
+      "Lasso" = "lasso",
+      "Experience Based" = "experience based",
+      "T-test" = "ttest",
+      "PCA (80% of variance)" = "pca - 80% of variance"
+    )
+  ) %>%
+  group_by(method) %>%
+  summarize(
+    ATE.pss.avg = mean(ATE.pss),
+    SE.pss.avg = mean(SE.pss),
+    lwr.pss.avg = mean(lwr.pss),
+    upr.pss.avg = mean(upr.pss),
+    ATE.ipw2.avg = mean(ATE.ipw2),
+    SE.ipw2.avg = mean(SE.ipw2),
+    lwr.ipw2.avg = mean(lwr.ipw2),
+    upr.ipw2.avg = mean(upr.ipw2),
+  ) %>%
+  mutate(n = 6000)
+```
+
+# Combine all results
+```{r}
+results_part <- rbind(result1_sum, result2_sum, result3_sum, result4_sum)
+
+results_part <- results_part %>%
+  relocate(n, .after = method)
+
+tbl_sum_part <- gt(
+  results_part,
+  groupname_col = "method"
+  ) %>%
+  tab_header(
+    title = md("Adjusted Treatment Effect (ATE) of Methods for <br> Propensity Score Variable Selection")
+  ) %>%
+  tab_spanner(
+    label = "Propensity Score Stratification",
+    columns = c("ATE.pss.avg":"upr.pss.avg")
+  ) %>%
+  tab_spanner(
+    label = "Inverse Probability Weighting",
+    columns = c("ATE.ipw2.avg":"upr.ipw2.avg")) %>%
+  cols_merge(
+    columns = c(lwr.pss.avg, upr.pss.avg),
+    pattern = "{1}, {2}"
+  ) |>
+  cols_merge(
+    columns = c(lwr.ipw2.avg, upr.ipw2.avg),
+    pattern = "{1}, {2}"
+  ) %>%
+  cols_label(
+    method = "Method",
+    ATE.pss.avg = "ATE",
+    SE.pss.avg = "SE",
+    lwr.pss.avg = "95% CI",
+    ATE.ipw2.avg = "ATE",
+    SE.ipw2.avg = "SE",
+    lwr.ipw2.avg = "95% CI"
+  ) %>%
+  tab_footnote(
+    footnote = "Mean value for combination of 500 of each combination of potential covariates (50, 100, 150) and true covariates (10, 20, 30)",
+    locations = cells_column_spanners(
+      c("Propensity Score Stratification",
+      "Inverse Probability Weighting")
+    )
+ ) %>%
+  cols_align(
+    align = c("center"),
+    columns = c(everything())
+  ) %>%
+  cols_align(
+    align = c("left"),
+    columns = c(method)
+  ) %>%
+  tab_style(
+    style = cell_text(weight = "bold"),
+    locations = cells_column_labels(columns=c(everything()))
+  ) %>%
+  fmt_number(columns = "ATE.pss.avg":"upr.ipw2.avg", decimals = 3) %>%
+  sub_missing(
+  columns = everything(),
+  rows = everything(),
+  missing_text = "--"
+)
+
+tbl_sum_part
+# gtsave(data, filename, path = NULL, ...)
+gtsave(tbl_sum_part,
+       filename = "tbl.sum.part.pdf",
+       # inline_css = TRUE,
+       path = "C:/Users/peder/Documents/UMN MS BIOSTATS/Causal Inference PUBH 7485/final project/step3_results/")
+```
+
+```{r}
+results <- rbind(result1, result2a, result2b, result2c, result3a, result3b, result3c, result4a, result4b, result4c)
+
+results_sum <- results %>%
+  relocate(n, .after = method) %>%
+  mutate(
+    method = fct_recode(
+      method,
+      "Forward Selection" = "forward selection",
+      "Lasso" = "lasso",
+      "Experience Based" = "experience based",
+      "T-test" = "ttest",
+      "PCA (80% of variance)" = "pca - 80% of variance"
+    )
+  ) %>%
+  group_by(method) %>%
+  summarize(
+    ATE.pss.avg = mean(ATE.pss),
+    SE.pss.avg = mean(SE.pss),
+    lwr.pss.avg = mean(lwr.pss),
+    upr.pss.avg = mean(upr.pss),
+    ATE.ipw2.avg = mean(ATE.ipw2),
+    SE.ipw2.avg = mean(SE.ipw2),
+    lwr.ipw2.avg = mean(lwr.ipw2),
+    upr.ipw2.avg = mean(upr.ipw2),
+  )
+
+tbl_sum <- gt(
+  results_sum
+  ) %>%
+  tab_header(
+    title = md("Adjusted Treatment Effect (ATE) of Methods for <br> Propensity Score Variable Selection")
+  ) %>%
+  tab_spanner(
+    label = "Propensity Score Stratification",
+    columns = c("ATE.pss.avg":"upr.pss.avg")
+  ) %>%
+  tab_spanner(
+    label = "Inverse Probability Weighting",
+    columns = c("ATE.ipw2.avg":"upr.ipw2.avg")) %>%
+  cols_merge(
+    columns = c(lwr.pss.avg, upr.pss.avg),
+    pattern = "{1}, {2}"
+  ) |>
+  cols_merge(
+    columns = c(lwr.ipw2.avg, upr.ipw2.avg),
+    pattern = "{1}, {2}"
+  ) %>%
+  cols_label(
+    method = "Method",
+    ATE.pss.avg = "ATE",
+    SE.pss.avg = "SE",
+    lwr.pss.avg = "95% CI",
+    ATE.ipw2.avg = "ATE",
+    SE.ipw2.avg = "SE",
+    lwr.ipw2.avg = "95% CI"
+  ) %>%
+  tab_footnote(
+    footnote = "Average value of 500 simulated combinations of each combination of sample size (1500, 3000, 4500, 6000), potential covariates (50, 100, 150), and true covariates (10, 20, 30)",
+    locations = cells_column_spanners(
+      c("Propensity Score Stratification",
+      "Inverse Probability Weighting")
+    )
+ ) %>%
+  cols_align(
+    align = c("center"),
+    columns = c(everything())
+  ) %>%
+  cols_align(
+    align = c("left"),
+    columns = c(method)
+  ) %>%
+  tab_style(
+    style = cell_text(weight = "bold"),
+    locations = cells_column_labels(columns=c(everything()))
+  ) %>%
+  fmt_number(columns = "ATE.pss.avg":"upr.ipw2.avg",
+             decimals = 3) %>%
+  sub_missing(
+  columns = everything(),
+  rows = everything(),
+  missing_text = "--"
+)
+
+tbl_sum
+# gtsave(data, filename, path = NULL, ...)
+gtsave(tbl_sum,
+       filename = "tbl.sum.pdf",
+       # inline_css = TRUE,
+       path = "C:/Users/peder/Documents/UMN MS BIOSTATS/Causal Inference PUBH 7485/final project/step3_results/")
+```
+
+
