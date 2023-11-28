@@ -1,0 +1,499 @@
+---
+title: "Simulation Project - Step 3 - Results"
+format: pdf
+execute: 
+  echo: false 
+  warning: false 
+  message: false 
+bibliography: reference.bib
+---
+
+```{r}
+source("Packages.R")
+```
+
+```{r load and transform needed data }
+
+####### ATE RESULTS 
+
+res.1 <- readRDS(
+  paste0(
+    getwd(), "/simulation results/result1.RDS")
+)
+
+res.2a <- readRDS(
+  paste0(
+    getwd(), "/simulation results/result2a.RDS")
+)
+
+res.2b <- readRDS(
+  paste0(
+    getwd(), "/simulation results/result2b.RDS")
+)
+
+res.2c <- readRDS(
+  paste0(
+    getwd(), "/simulation results/result2c.RDS")
+)
+
+res.3a <- readRDS(
+  paste0(
+    getwd(), "/simulation results/result3a.RDS")
+)
+
+res.3b <- readRDS(
+  paste0(
+    getwd(), "/simulation results/result3b.RDS")
+)
+
+res.3c <- readRDS(
+  paste0(
+    getwd(), "/simulation results/result3c.RDS")
+)
+
+res.4a <- readRDS(
+  paste0(
+    getwd(), "/simulation results/result4a.RDS")
+)
+
+res.4b <- readRDS(
+  paste0(
+    getwd(), "/simulation results/result4b.RDS")
+)
+
+res.5 <- readRDS(
+  paste0(
+    getwd(), "/simulation results/result5.RDS")
+)
+
+res.6 <- readRDS(
+  paste0(
+    getwd(), "/simulation results/result6.RDS")
+)
+
+######### load covariate selection result 
+
+cov.1 <- readRDS(
+  paste0(
+    getwd(), "/simulation results/cov.info1.RDS")
+)
+
+cov.2a <- readRDS(
+  paste0(
+    getwd(), "/simulation results/cov.info2a.RDS")
+)
+
+cov.2b <- readRDS(
+  paste0(
+    getwd(), "/simulation results/cov.info2b.RDS")
+)
+
+cov.2c <- readRDS(
+  paste0(
+    getwd(), "/simulation results/cov.info2c.RDS")
+)
+
+cov.3a <- readRDS(
+  paste0(
+    getwd(), "/simulation results/cov.info3a.RDS")
+)
+
+cov.3b <- readRDS(
+  paste0(
+    getwd(), "/simulation results/cov.info3b.RDS")
+)
+
+cov.3c <- readRDS(
+  paste0(
+    getwd(), "/simulation results/cov.info3c.RDS")
+)
+
+cov.4a <- readRDS(
+  paste0(
+    getwd(), "/simulation results/cov.info4a.RDS")
+)
+
+cov.4b <- readRDS(
+  paste0(
+    getwd(), "/simulation results/cov.info4b.RDS")
+)
+
+cov.5 <- readRDS(
+  paste0(
+    getwd(), "/simulation results/cov.info5.RDS")
+)
+
+cov.6 <- readRDS(
+  paste0(
+    getwd(), "/simulation results/cov.info6.RDS")
+)
+
+##############
+# process covariate selection results 
+
+results <- 
+  cbind(
+    rbind(res.1, res.2a, res.2b, res.2c, 
+          res.3a, res.3b, res.3c, 
+          res.4a, res.4b, res.5, res.6) , 
+    
+    rbind(cov.1, cov.2a, cov.2b, cov.2c, 
+          cov.3a, cov.3b, cov.3c, 
+          cov.4a, cov.4b, cov.5, cov.6) %>% select(overlap.cov, miss.cov, add.cov) 
+) %>% 
+  filter(!(method %in% c("experience based", "pca - 80% of variance"))) %>% 
+  mutate(
+    method = ifelse(method == "best case", "Oracle", method),
+    method = ifelse(method == "experience based (10 covariates)", "experience based", method),
+    method = str_to_title(method),
+    method = ifelse(method == "Ttest", "T-test", method),
+    method = factor(method, levels = c("Oracle", "T-test", "Experience Based", "Adaptive Lasso",
+                                       "Lasso", "Forward Selection")),
+    ATE.ipw2 = ifelse(is.na(ATE.ipw2), ATE.pss, ATE.ipw2),
+    bias.pss = ATE.pss - ATE.true,
+    bias.ipw = ATE.ipw2 - ATE.true,
+    MSE.pss = (ATE.pss - ATE.true)^2,
+    MSE.ipw = (ATE.ipw2 - ATE.true)^2,
+    s.typ = factor(s),
+    grp.m = paste0(method, "; s = ", s), 
+    
+    p_true_selected = overlap.cov/s, 
+    p_false_selected = add.cov/s
+    )
+  
+#########
+# further aggregation of raw results 
+res.m <- results %>% 
+  group_by(method, m, s.typ, s, grp.m) %>%
+  summarise(ATE.true = mean(ATE.true),
+            ATE.pss = mean(ATE.pss),
+            Bias.pss = (mean(bias.pss)),
+            MSE.pss = mean(MSE.pss),
+            R.Bias.pss = (Bias.pss/ATE.true),
+            SE.pss = mean(SE.pss),
+            ATE.ipw2 = mean(ATE.ipw2),
+            Bias.ipw2 = (mean(bias.ipw)),
+            MSE.ipw2 = mean(MSE.ipw),
+            R.Bias.ipw2 = (Bias.ipw2/ATE.true),
+            SE.ipw2 = mean(SE.ipw2)/100,
+            mean_p_true_selected = mean(p_true_selected), 
+            mean_p_false_selected = mean(p_false_selected), 
+            .groups = "keep") %>%
+  ungroup() 
+
+```
+
+# Notes for working with QMD file 
+
+This is an example of citing a table: @tbl-main-effects, using its label `tbl-main-effects`. Make sure to start *label* for a table with `tbl-`. Review chunks for formatting of labels and captions. They will automatically update labels and captions 
+
+This is an example of citing a figure: @fig-bias-summary , using its label `fig-bias-summary `. Make sure to start *label* for a figure with `fig-`
+
+example of citing papers via bibtex files. Citing @shortreed2017outcome using its tag `shortreed2017outcome` in bib file
+
+# Introduction 
+
+
+
+
+# Methods
+
+# Results 
+
+### Simulation Results
+
+```{r plot - summary of BIAS for IPW and PSS by method and covariate space size }
+#| label: fig-bias-summary 
+#| fig-cap: "CAPTION FOR THIS PLOT REQURIED" 
+#| fig-width: 10
+#| fig-height: 8
+LINES <- c("10" = "solid", "20" = "dashed", "30" = "dotted")
+dodge <- 0
+p1a <- res.m %>% 
+  ggplot(aes(x=m, y=R.Bias.ipw2, group=grp.m, colour=method, linetype = s.typ)) + 
+  geom_point(position=position_dodge(width=dodge), size = 0.75) +
+  geom_line(position=position_dodge(width=dodge)) +
+  scale_x_continuous(breaks = c(50, 100, 150)) +
+  xlab("Total # of Covariates") +
+  ylab("Relative ATE Bias") +
+  labs(title = "IPW",
+       linetype="# of True Covariates", colour="Methods") + 
+  scale_color_manual(values=c("deeppink", "darkgrey", "tan3", "deepskyblue", "yellowgreen", "purple")) +
+  scale_linetype_manual(values = LINES) +
+  theme_bw()
+
+p1b <- res.m %>% 
+  ggplot(aes(x=m, y=R.Bias.pss, group=grp.m, colour=method, linetype = s.typ)) + 
+  geom_point(position=position_dodge(width=dodge), size = 0.75) +
+  geom_line(position=position_dodge(width=dodge)) +
+  scale_x_continuous(breaks = c(50, 100, 150)) +
+  xlab("Total # of Covariates") +
+  ylab("Relative ATE Bias") +
+  labs(title = "PSS",
+       linetype="# of True Covariates", colour="Methods") + 
+  scale_color_manual(values=c("deeppink", "darkgrey", "tan3", "deepskyblue", "yellowgreen", "purple")) +
+  scale_linetype_manual(values = LINES) +
+  theme_bw()
+
+p1a + p1b + plot_layout(nrow = 1, guides = "collect") & theme(legend.position = "bottom") & 
+  plot_annotation(title = 'Relative ATE Bias (Bias/True ATE) using Different Estimator (IPW v.s. PSS)',
+                  #caption = 'made with patchwork',
+                  theme = theme(plot.title = element_text(size = 16)))
+```
+
+```{r plot - summary of MSE for IPW and PSS by method and covariate space size }
+#| label: fig-mse-summary 
+#| fig-cap: "CAPTION FOR THIS PLOT REQURIED" 
+#| fig-width: 10
+#| fig-height: 8
+
+### MSE
+p2a <- res.m %>% 
+  ggplot(aes(x=m, y=MSE.ipw2, group=grp.m, colour=method, linetype = s.typ)) + 
+  geom_point(position=position_dodge(width=dodge), size = 0.75) +
+  geom_line(position=position_dodge(width=dodge)) +
+  scale_x_continuous(breaks = c(50, 100, 150)) +
+  xlab("Total # of Covariates") +
+  ylab("MSE") +
+  labs(title = "IPW",
+       linetype="# of True Covariates", colour="Methods") + 
+  scale_color_manual(values=c("deeppink", "darkgrey", "tan3", "deepskyblue", "yellowgreen", "purple")) +
+  scale_linetype_manual(values = LINES) +
+  scale_y_continuous(trans = "log10", labels = function(x) format(x, scientific = FALSE)) +
+  theme_bw()
+
+p2b <- res.m %>% 
+  ggplot(aes(x=m, y=MSE.pss, group=grp.m, colour=method, linetype = s.typ)) + 
+  geom_point(position=position_dodge(width=dodge), size = 0.75) +
+  geom_line(position=position_dodge(width=dodge)) +
+  scale_x_continuous(breaks = c(50, 100, 150)) +
+  xlab("Total # of Covariates") +
+  ylab("MSE") +
+  labs(title = "PSS",
+       linetype="# of True Covariates", colour="Methods") + 
+  scale_color_manual(values=c("deeppink", "darkgrey", "tan3", "deepskyblue", "yellowgreen", "purple")) +
+  scale_linetype_manual(values = LINES) +
+  scale_y_continuous(trans = "log10", labels = function(x) format(x, scientific = FALSE)) +
+  theme_bw()
+
+p2a + p2b + plot_layout(nrow = 1, guides = "collect") & theme(legend.position = "bottom") & 
+  plot_annotation(title = 'MSE using Different Estimator (IPW v.s. PSS)',
+                  #caption = 'made with patchwork',
+                  theme = theme(plot.title = element_text(size = 16)))
+```
+
+```{r plot - summary of Correct Covariates Selection for IPW and PSS by method and covariate space size }
+#| label: fig-true-cov-ratio-summary 
+#| fig-cap: "CAPTION FOR THIS PLOT REQURIED" 
+#| fig-width: 10
+#| fig-height: 8
+
+### 
+p2a <- res.m %>% 
+  ggplot(aes(x=m, y=mean_p_true_selected, group=grp.m, colour=method, linetype = s.typ)) + 
+  geom_point(position=position_dodge(width=dodge), size = 0.75) +
+  geom_line(position=position_dodge(width=dodge)) +
+  scale_x_continuous(breaks = c(50, 100, 150)) +
+  xlab("Total # of Covariates") +
+  ylab("% of True Selected Predictors against True Predictors") +
+  labs(title = "IPW",
+       linetype="# of True Covariates", colour="Methods") + 
+  scale_color_manual(values=c("deeppink", "darkgrey", "tan3", "deepskyblue", "yellowgreen", "purple")) +
+  scale_linetype_manual(values = LINES) +
+  scale_y_continuous(labels = function(x) paste0(round(x,4)*100, "%")) +
+  theme_bw()
+
+p2b <- res.m %>% 
+  ggplot(aes(x=m, y=mean_p_false_selected, group=grp.m, colour=method, linetype = s.typ)) + 
+  geom_point(position=position_dodge(width=dodge), size = 0.75) +
+  geom_line(position=position_dodge(width=dodge)) +
+  scale_x_continuous(breaks = c(50, 100, 150)) +
+  xlab("Total # of Covariates") +
+  ylab("% of False Predictors against True Predictors") +
+  labs(title = "PSS",
+       linetype="# of True Covariates", colour="Methods") + 
+  scale_color_manual(values=c("deeppink", "darkgrey", "tan3", "deepskyblue", "yellowgreen", "purple")) +
+  scale_linetype_manual(values = LINES) +
+  scale_y_continuous(labels = function(x) paste0(round(x,4)*100, "%")) +
+  theme_bw()
+
+p2a + p2b + plot_layout(nrow = 1, guides = "collect") & theme(legend.position = "bottom") & 
+  plot_annotation(title = 'Summary of Variable Selection Process, Comparison with True Covariate Space',
+                  #caption = 'made with patchwork',
+                  theme = theme(plot.title = element_text(size = 16)))
+```
+
+### Main Effects 
+
+```{r table - main effects of parameter permutation table }
+#| label: tbl-main-effects 
+#| tbl-cap: "Gaussian GLM with log-transformed resposnse effect estiamtes. Coefficients are exponentiated and present the effect as % change" 
+#| 
+# previous version with some high VIF 
+model_1 = lm(log(MSE.ipw) ~ m + n + s*(overlap.cov + add.cov + method), data = results) 
+
+# reduced model 
+# model_1 = lm(log(MSE.ipw) ~ m + n + method + s*(overlap.cov + add.cov), data = results) 
+
+model_1 %>% tidy(conf.int = T) %>%
+  filter(term != "(Intercept)") %>% 
+  mutate(exp_estimate = paste0(round(exp(estimate) - 1, 3) * 100, "%"),  
+         ci = paste("(", 
+                    round(exp(conf.low) - 1, 4) * 100, "%", 
+                    ", ",
+                    round(exp(conf.high) - 1, 4) * 100, "%", 
+                    ")"
+                    ), 
+         signif = ifelse(p.value < 0.05, "*", ""), 
+         new_term = term ## make pretty labels here 
+         ) %>% 
+  select(term, exp_estimate, ci, p.value, signif) %>% 
+  kable(booktabs = T, 
+        digits = 4, 
+        align = c('l', 'c', 'c', 'c', 'c'), 
+        linesep = "\\addlinespace", 
+        col.names = c("Predictor","Estimate", "95% CI", "P-value", "Significance")
+        ) %>% 
+  column_spec(5, bold = T)
+```
+
+```{r plot - valdiate model for inference - not evaluated for paper output }
+#| eval: false 
+#| 
+
+res = data.frame(resid = rstudent(model_1), 
+                         predicted = model_1$fitted.values)
+
+n_out = res %>% filter(abs(resid) > 2) %>% nrow()
+p_out = n_out/nrow(res)
+
+## residuals seem okay 
+ggplot(data = res, 
+       aes(x = predicted, y = resid)) + 
+  geom_point() + 
+  geom_smooth() + 
+  theme_minimal() + 
+  geom_hline(yintercept = 0, color = "red", linetype = "dashed") + 
+  geom_hline(yintercept = -2, color = "darkgrey", linetype = "dashed") + 
+  geom_hline(yintercept = 2, color = "darkgrey", linetype = "dashed") + 
+  ggtitle(paste0("% Residuals outside of -2/2 range: ", 
+                 round(p_out, 4) * 100, "%"
+                 ))
+
+## vif for interactions is too big, need to do something about it 
+## a few more inflated factors on a reduced model but okay overall 
+vif(model_1) %>% data.frame()
+
+```
+
+```{r plot - plot of main marginal effects of covariate speace by var selection results 2x1 grid of plots }
+#| fig-height: 6
+#| fig-width: 10 
+#| label: fig-margin-effect-s-int
+#| fig-cap: "Estimated Marginal Effects IPW Estimator FILL IN THE REST" 
+
+plots = "S by Covs"
+
+if(plots == "S by Covs"){
+  
+  plot_model(model = model_1, 
+             type = "eff", 
+             terms = c("s", "overlap.cov[5, 10, 15]")) + 
+    theme_minimal() + 
+    theme(legend.position = "bottom") + 
+    labs(x = "True Covariate Space Size", 
+         y = "IPW Mean Squared Error", 
+         color = "# True Covariates Selected") + 
+    scale_y_continuous(labels = function(x){exp(x) %>% round(., 2)}) + 
+    ggtitle("") -> p.left 
+  
+  plot_model(model = model_1, 
+             type = "eff", 
+             terms = c("s", "add.cov[0, 5, 10]")) + 
+    theme_minimal() + 
+    theme(legend.position = "bottom") + 
+    labs(x = "True Covariate Space Size", 
+         y = "IPW Mean Squared Error", 
+         color = "# False Covariates Selected") + 
+    scale_y_continuous(labels = function(x){exp(x) %>% round(., 2)}) + 
+    ggtitle("") -> p.right
+  
+  
+  p.left + p.right + plot_layout(nrow = 1, guides = "collect") & theme(legend.position = "bottom") & 
+    plot_annotation(title = 'Effect of Covariate Selection Process on MSE',
+                    #caption = 'made with patchwork',
+                    theme = theme(plot.title = element_text(size = 16)))
+
+}
+
+if(plots == "Covs by S"){
+  
+  plot_model(model = model_1, 
+             type = "eff", 
+             terms = c("overlap.cov", "s [10, 20, 30]")) + 
+    theme_minimal() + 
+    theme(legend.position = "bottom") + 
+    labs(x = "True Covariate Selected", 
+         y = "IPW Mean Squared Error", 
+         color = "# Covariates") + 
+    scale_y_continuous(labels = function(x){exp(x) %>% round(., 2)}) + 
+    ggtitle("Effect of True Covariates") -> p.left 
+  
+  plot_model(model = model_1, 
+             type = "eff", 
+             terms = c("add.cov", "s[10, 20, 30]")) + 
+    theme_minimal() + 
+    theme(legend.position = "bottom") + 
+    labs(x = "False Covariate Selected", 
+         y = "IPW Mean Squared Error", 
+         color = "# Covariates") + 
+    scale_y_continuous(labels = function(x){exp(x) %>% round(., 2)})  + 
+    ggtitle("Effect of False Covariates") -> p.right
+  
+  
+  p.left + p.right + plot_layout(nrow = 1, guides = "collect") & theme(legend.position = "bottom") & 
+    plot_annotation(title = 'Effect of Covariate Selection Process on MSE',
+                    #caption = 'made with patchwork',
+                    theme = theme(plot.title = element_text(size = 16)))
+
+}
+
+```
+
+```{r plot -  plot of main effect of variable selction method in covariate space 1 main plot}
+#| label: fig-var-sel-effect
+#| fig-cap: "Effect of Variable Selection Method on IPW MSE" 
+#| fig-width: 10
+#| fig-height: 6
+
+plot_model(model = model_1, 
+           type = "eff", 
+           terms = c("s", "method")) + 
+  theme_minimal() + 
+  theme(legend.position = "bottom") + 
+  labs(x = "True Covariate Space Size", 
+       y = "IPW Mean Squared Error", 
+       color = "Variable Selection Method") + 
+  scale_y_continuous(labels = function(x){exp(x) %>% round(., 2)}) + 
+  ggtitle("") 
+
+```
+
+# Discussion 
+
+# Conclusion 
+
+\newpage 
+
+<!-- this is a weird thing we need to do to make citations show up before appendix. 
+otherwise, i learned, bib file citations will show up in the last section of your paper defined by any 
+number of 'pound marks' like # or ## or even #### 
+--> 
+
+# References
+
+<div id="refs"></div>
+
+\newpage 
+
+# Appendix

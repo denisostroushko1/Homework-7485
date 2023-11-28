@@ -236,7 +236,8 @@ hist(log(all_results$ipw2_mse))
 se_model <- lm(log(SE.ipw2) ~ 
                  method + 
                  poly(n, 2) +
-                 m + poly(s,2) + 
+                 m + 
+                 s + 
                  m:s + 
                  method:s, data = all_results)
 
@@ -245,8 +246,9 @@ options(scipen = 999)
 se_model %>% summary() %>% tidy() %>% 
   mutate(ci_low = estimate - 1.96 * std.error, 
          ci_high = estimate + 1.96 * std.error) %>% 
-  select(term, estimate, ci_low, ci_high) %>% 
-  mutate_at(c("estimate", "ci_low", "ci_high"), ~ round(exp(.), 4)) 
+  mutate_at(c("estimate", "ci_low", "ci_high"), ~ round(exp(.), 4)) %>% 
+  mutate(p_change = round(100*(estimate - 1), 4))%>% 
+  select(term, estimate, p_change, ci_low, ci_high)  
 
 (se_model %>% summary())$r.squared
 
