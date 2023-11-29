@@ -158,7 +158,7 @@ results <-
     grp.m = paste0(method, "; s = ", s), 
     
     p_true_selected = overlap.cov/s, 
-    p_false_selected = add.cov/s
+    p_total_selected = (add.cov + overlap.cov)/s
     )
   
 #########
@@ -177,7 +177,7 @@ res.m <- results %>%
             R.Bias.ipw2 = (Bias.ipw2/ATE.true),
             SE.ipw2 = mean(SE.ipw2)/100,
             mean_p_true_selected = mean(p_true_selected), 
-            mean_p_false_selected = mean(p_false_selected), 
+            mean_p_total_selected = mean(p_total_selected), 
             .groups = "keep") %>%
   ungroup() 
 
@@ -326,12 +326,12 @@ p2a <- res.m %>%
   theme_bw()
 
 p2b <- res.m %>% 
-  ggplot(aes(x=m, y=mean_p_false_selected, group=grp.m, colour=method, linetype = s.typ)) + 
+  ggplot(aes(x=m, y=mean_p_total_selected, group=grp.m, colour=method, linetype = s.typ)) + 
   geom_point(position=position_dodge(width=dodge), size = 0.75) +
   geom_line(position=position_dodge(width=dodge)) +
   scale_x_continuous(breaks = c(50, 100, 150)) +
   xlab("Total # of Covariates") +
-  ylab("% of False Predictors against True Predictors") +
+  ylab("% of Total Predictors against True Predictors") +
   labs(title = "PSS",
        linetype="# of True Covariates", colour="Methods") + 
   scale_color_manual(values=c("deeppink", "darkgrey", "tan3", "deepskyblue", "yellowgreen", "purple")) +
@@ -347,7 +347,7 @@ p2a + p2b + plot_layout(nrow = 1, guides = "collect") & theme(legend.position = 
 
 ### Main Effects 
 
-```{r evaluation of intercation of the variabce estimates }
+```{r not - evaluated evaluation of interaction of the variabce estimates }
 #| eval: false 
 model_1 = lm(log(MSE.ipw) ~ m + sqrt(n) + method + s*(p_true_selected + p_false_selected), data = results) 
 model_1 %>% tidy(conf.int = T)  -> no_int_var_comp 
@@ -374,6 +374,11 @@ all_ <-
              
              int_minus_no_int = int_ci_range - no_int_ci_range)
 
+## correlation of factors 
+
+results %>% na.omit() %>% 
+  select(m, n, s, p_true_selected, p_total_selected) %>% cor()
+
 ```
 
 ```{r table - main effects of parameter permutation table }
@@ -381,8 +386,16 @@ all_ <-
 #| tbl-cap: "Gaussian GLM with log-transformed resposnse effect estiamtes. Coefficients are exponentiated and present the effect as % change" 
 #| 
 # previous version with some high VIF 
+model = "main"
 
-  model_1 = lm(log(MSE.ipw) ~ m + n + s*(method + p_true_selected) + p_false_selected, data = results) 
+if(model == "main"){
+  model_1 = lm(log(MSE.ipw) ~ m + n + s*(method + p_true_selected) + p_total_selected, data = results) 
+}
+
+if(model == "experimental"){
+  model_1 = lm(log(MSE.ipw) ~ m + n + s*(method + p_true_selected + p_total_selected), data = results) 
+}
+#  model_1 = lm(log(SE.ipw2) ~ m + n + s*(method + p_true_selected) + p_false_selected, data = results) 
 
 rsq <- summary(model_1)$r.squared
 
@@ -401,7 +414,7 @@ model_1 %>% tidy(conf.int = T) %>%
          signif = ifelse(p.value < 0.05, "*", ""), 
          new_term = term ## make pretty labels here 
          ) %>% 
-  select(term, exp_estimate, ci, p.value, signif) %>% 
+  select(term, exp_estimate, ci, p.value, signif) %>% # View()
   kable(booktabs = T, 
         digits = 4, 
         align = c('l', 'c', 'c', 'c', 'c'), 
@@ -410,6 +423,7 @@ model_1 %>% tidy(conf.int = T) %>%
         ) %>% 
   column_spec(5, bold = T) %>% 
   add_footnote(paste0("Regression model explains ", round(rsq, 4)*100, "% of variation in Squared Errors of IPW estimator"))
+
 ```
 ```{r plot - valdiate model for inference - not evaluated for paper output }
 #| eval: false 
@@ -495,7 +509,7 @@ if(plots == "Covs by S"){
   
   plot_model(model = model_1, 
              type = "eff", 
-             terms = c("p_false_selected[0, 1, 2]", "s[10, 20, 30]")) + 
+             terms = c("p_total_selected[0, 1, 2]", "s[10, 20, 30]")) + 
     theme_minimal() + 
     theme(legend.position = "bottom") + 
     labs(x = "False Covariate Selected", 
@@ -538,12 +552,27 @@ plot_model(model = model_1,
 #| fig-height: 6
 plot_model(model = model_1, 
            type = "eff", 
-           terms = c("p_false_selected[0, 1, 2]", "method", "s[10, 20, 30]" )) + 
+           terms = c("p_true_selected", "method", "s[10, 20, 30]" )) + 
   theme_minimal() + 
   theme(legend.position = "bottom")
 
+# p_false_selected[0, 1, 2]
 
 ```
+
+```{r  }
+#| fig-width: 10
+#| fig-height: 6
+plot_model(model = model_1, 
+           type = "eff", 
+           terms = c("p_total_selected[0, 1, 2]", "method", "s[10, 20, 30]" )) + 
+  theme_minimal() + 
+  theme(legend.position = "bottom")
+
+# 
+
+```
+
 
 **^^^ Mains**
 
