@@ -1,5 +1,5 @@
 ---
-title: "Simulation Project - Step 3 - Results"
+title: "The Effect of Varibale Selection Approaches on MSE of IPW ATE Estimator"
 format: pdf
 execute: 
   echo: false 
@@ -193,8 +193,28 @@ example of citing papers via bibtex files. Citing @shortreed2017outcome using it
 
 # Introduction 
 
+<!-- Applied Analyses 
+Get examples of covatiate dimensionality space and provide as examples 
+--> 
 
+https://www.ncbi.nlm.nih.gov/pmc/articles/PMC8227634/#:~:text=In%20the%20Obstetrics%20and%20Periodontal,of%20preterm%20labor%20%5B73%5D.
 
+https://accpjournals.onlinelibrary.wiley.com/doi/abs/10.1592/phco.23.8.1037.32876?casa_token=-v6XJv5w0DkAAAAA:DJdg3MRA_a9xY093j773zpMOCKSlLYQ2jeJSjeCjR8hc7_J-WIoEeOiwNEuCvI-oUhyVgf-9bc6aNA
+
+https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3065283/
+
+Use of random forest with a lot of variables 
+https://www.ncbi.nlm.nih.gov/pmc/articles/PMC5920646/
+
+<!-- Variable Selection Studies --> 
+
+* Super high dim variable selection and ANDI data 
+
+https://onlinelibrary.wiley.com/doi/full/10.1111/biom.13625?casa_token=TPy_un3cN-EAAAAA%3Asm_EoAthJYwoV489HGuY_CnDi0BV7JIWSOvWyTcynDH6dYDq0TOQJGe6pHMzhcFI4z42wdEjvA6L8w
+
+* Some study with bias and mse 
+
+https://onlinelibrary.wiley.com/doi/full/10.1002/sim.4469?casa_token=N3XCrX6yrUsAAAAA%3AQ2uBYcmFy4fL5BlDF8FhHSi5VRVqXAfxKxiVoQ8sxic-ikpXzZnL8_FPmqQhPGPP1No3OxG74JK0fw
 
 # Methods
 
@@ -282,6 +302,8 @@ p2a + p2b + plot_layout(nrow = 1, guides = "collect") & theme(legend.position = 
                   theme = theme(plot.title = element_text(size = 16)))
 ```
 
+
+
 ```{r plot - summary of Correct Covariates Selection for IPW and PSS by method and covariate space size }
 #| label: fig-true-cov-ratio-summary 
 #| fig-cap: "CAPTION FOR THIS PLOT REQURIED" 
@@ -325,12 +347,44 @@ p2a + p2b + plot_layout(nrow = 1, guides = "collect") & theme(legend.position = 
 
 ### Main Effects 
 
+```{r evaluation of intercation of the variabce estimates }
+#| eval: false 
+model_1 = lm(log(MSE.ipw) ~ m + sqrt(n) + method + s*(p_true_selected + p_false_selected), data = results) 
+model_1 %>% tidy(conf.int = T)  -> no_int_var_comp 
+
+model_1 = lm(log(MSE.ipw) ~ m + sqrt(n) + s*(p_true_selected + p_false_selected + method), data = results) 
+model_1 %>% tidy(conf.int = T)  -> int_var_comp 
+
+all_ <- 
+  left_join(
+    int_var_comp %>% select(term, estimate, conf.low, conf.high) %>% 
+      rename(conf.low.int = conf.low, 
+             conf.high.int = conf.high, 
+             estimate.int = estimate), 
+    
+    no_int_var_comp %>% select(term, estimate, conf.low, conf.high) %>% 
+      rename(conf.low.no_int = conf.low, 
+             conf.high.no_int = conf.high,
+             estimate.no_int = estimate), 
+    
+    by = "term"
+  )  %>% 
+      mutate(int_ci_range = conf.high.int - conf.low.int, 
+             no_int_ci_range = conf.high.no_int - conf.low.no_int, 
+             
+             int_minus_no_int = int_ci_range - no_int_ci_range)
+
+```
+
 ```{r table - main effects of parameter permutation table }
 #| label: tbl-main-effects 
 #| tbl-cap: "Gaussian GLM with log-transformed resposnse effect estiamtes. Coefficients are exponentiated and present the effect as % change" 
 #| 
 # previous version with some high VIF 
-model_1 = lm(log(MSE.ipw) ~ m + n + s*(overlap.cov + add.cov + method), data = results) 
+
+  model_1 = lm(log(MSE.ipw) ~ m + n + s*(method + p_true_selected) + p_false_selected, data = results) 
+
+rsq <- summary(model_1)$r.squared
 
 # reduced model 
 # model_1 = lm(log(MSE.ipw) ~ m + n + method + s*(overlap.cov + add.cov), data = results) 
@@ -354,9 +408,9 @@ model_1 %>% tidy(conf.int = T) %>%
         linesep = "\\addlinespace", 
         col.names = c("Predictor","Estimate", "95% CI", "P-value", "Significance")
         ) %>% 
-  column_spec(5, bold = T)
+  column_spec(5, bold = T) %>% 
+  add_footnote(paste0("Regression model explains ", round(rsq, 4)*100, "% of variation in Squared Errors of IPW estimator"))
 ```
-
 ```{r plot - valdiate model for inference - not evaluated for paper output }
 #| eval: false 
 #| 
@@ -382,7 +436,7 @@ ggplot(data = res,
 
 ## vif for interactions is too big, need to do something about it 
 ## a few more inflated factors on a reduced model but okay overall 
-vif(model_1) %>% data.frame()
+vif(model_1, type = 'predictor') %>% data.frame()
 
 ```
 
@@ -392,13 +446,13 @@ vif(model_1) %>% data.frame()
 #| label: fig-margin-effect-s-int
 #| fig-cap: "Estimated Marginal Effects IPW Estimator FILL IN THE REST" 
 
-plots = "S by Covs"
+plots = "Covs by S"
 
 if(plots == "S by Covs"){
   
   plot_model(model = model_1, 
              type = "eff", 
-             terms = c("s", "overlap.cov[5, 10, 15]")) + 
+             terms = c("s", "p_true_selected[0.25, 0.5, 0.75]")) + 
     theme_minimal() + 
     theme(legend.position = "bottom") + 
     labs(x = "True Covariate Space Size", 
@@ -409,7 +463,7 @@ if(plots == "S by Covs"){
   
   plot_model(model = model_1, 
              type = "eff", 
-             terms = c("s", "add.cov[0, 5, 10]")) + 
+             terms = c("s", "p_false_selected[0.25, 1, 2]")) + 
     theme_minimal() + 
     theme(legend.position = "bottom") + 
     labs(x = "True Covariate Space Size", 
@@ -430,7 +484,7 @@ if(plots == "Covs by S"){
   
   plot_model(model = model_1, 
              type = "eff", 
-             terms = c("overlap.cov", "s [10, 20, 30]")) + 
+             terms = c("p_true_selected", "s [10, 20, 30]")) + 
     theme_minimal() + 
     theme(legend.position = "bottom") + 
     labs(x = "True Covariate Selected", 
@@ -441,7 +495,7 @@ if(plots == "Covs by S"){
   
   plot_model(model = model_1, 
              type = "eff", 
-             terms = c("add.cov", "s[10, 20, 30]")) + 
+             terms = c("p_false_selected[0, 1, 2]", "s[10, 20, 30]")) + 
     theme_minimal() + 
     theme(legend.position = "bottom") + 
     labs(x = "False Covariate Selected", 
@@ -478,6 +532,26 @@ plot_model(model = model_1,
   ggtitle("") 
 
 ```
+
+```{r best variable selection model for large space as p true cov increases }
+#| fig-width: 10
+#| fig-height: 6
+plot_model(model = model_1, 
+           type = "eff", 
+           terms = c("p_false_selected[0, 1, 2]", "method", "s[10, 20, 30]" )) + 
+  theme_minimal() + 
+  theme(legend.position = "bottom")
+
+
+```
+
+**^^^ Mains**
+
+1. As the number of true predictors increases, models get more complicated, and we have on average higeher MSE 
+
+2. However, in a situatin where true predictor space is samll, adaptive lasso performs almost as good as the best case scenario of knowing the true predicotrs
+
+3. As we go from simpler to more complicated space, all methods are good. Conclusion: use adaptive lasso 
 
 # Discussion 
 
