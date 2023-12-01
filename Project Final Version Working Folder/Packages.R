@@ -7,4 +7,5 @@ library(gridExtra)
 library(car)
 library(broom) # For converting models into data frame
 library(tableone)
+library(gt)
 library(tidyverse)
