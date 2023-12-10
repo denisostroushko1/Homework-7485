@@ -1,0 +1,469 @@
+---
+title: "Denis Ostroushko - HW1"
+format: 
+  pdf:
+    toc: false
+execute: 
+  echo: false
+  warning: false
+  message: false
+---
+
+
+```{r read packages }
+total_nchar = nchar(getwd())
+remove_nchar = nchar("HW1")
+path = substr(getwd(), 1, total_nchar - remove_nchar)
+source(paste0(path,"Master Packages.R"))
+```
+
+```{r read in data}
+data1 <- load("OPT_Study_PUBH7485_8485_2023.Rdata")
+
+# Notice that the result of this function is not assigned to an object name. When R calls load(), all of the R objects saved in the file are loaded into R. The names given to these objects when they were originally saved will be given to them when they are loaded. The command >  ls() can be used to print out all of the objects currently loaded into R.
+
+# https://higgi13425.github.io/medicaldata/reference/opt.html
+
+#     summary(data)
+```
+
+# Problem 1
+
+```{r}
+#| incldue: false
+#| results: hide
+
+data_tbl_1 = data %>% select(-PID, -number_race, -Race_ethnicity)
+# 
+# view_col = 
+#   data.frame(
+#     df_cols = colnames(data_tbl_1) 
+#   ) %>% 
+#   mutate(
+#     pretty_col = 
+#       case_when(
+#         
+#       )
+#   )
+
+CreateTableOne(
+  data = data_tbl_1, 
+  strata = "Group", 
+  vars = c("Preg.ended...37.wk", "Birthweight", 
+           setdiff(colnames(data), 
+                   c("Preg.ended...37.wk", "Birthweight", "Group")
+                   )
+           ), 
+  factorVars = c(
+    'Clinic', 'Black', 'White', 'Nat.Am', 'Asian', 'Hisp', 'Education',
+    'Public.Asstce', 'Hypertension', 'Diabetes', 'BL.Diab.Type', 'Use.Tob',
+    'Use.Alc', 'Drug.Add', 'Prev.preg', 'Live.PTB', 'pont.ab',  
+    'Induced.ab', 'Any.live.ptb.sb.sp.ab.in.ab', 'Birth.outcome' 
+  ),
+  
+  includeNA = T, 
+  test = F, 
+  smd = T
+  
+) -> table1
+
+print(table1, smd = TRUE, showAllLevels = F, varLabels = TRUE) -> table1_for_kable
+
+which(rownames(table1_for_kable) == "Any.live.ptb.sb.sp.ab.in.ab = Yes (%)") -> any.live
+which(rownames(table1_for_kable) == "Public.Asstce = Yes (%)") -> pa
+
+
+rownames(table1_for_kable)[any.live] = "Any previous adverse birthing events = Yes (%)"
+rownames(table1_for_kable)[pa] = "Public Assistance = Yes (%)"
+
+rownames(table1_for_kable)[1:2] = c("N", "Pre-term Pregnancy = Yes (%)")
+```
+
+
+```{r}
+#| label: tbl-table-one
+#| tbl-cap: "All Potentially Confounding Variables Stratified by Treatment Group" 
+table1_for_kable %>% 
+  kable(
+    col.names = c("Control Group", "Treatment Groud", "SMD"), 
+    booktabs = T,
+    longtable = TRUE
+    ) %>% 
+  kable_styling(
+    font_size = 7, 
+    latex_options = c("striped", "hover", "condensed", "HOLD_position")
+    ) %>% 
+  
+  add_indent(
+    c(8:11, 
+      18:20, 
+      29:31, 
+      34:36, 
+      39:41
+      ), level_of_indent = 1
+    )
+  
+
+```
+
+# Problem 2 
+
+For the purpose of this problem, we need to impute categorical variables with mode values, and continuous variables with 
+medians. 
+
+I identified `Birthweight`, `N.prev.preg`, `Race_ethnicity`, and `Use.Tob` as variables that are subject to imputation. 
+
+
+```{r prepare modeling data for problem 3}
+
+modeling_data <- 
+  data %>% 
+  mutate(Race_ethnicity = as.factor(Race_ethnicity)) %>% 
+  select(
+    `Preg.ended...37.wk` , Birthweight, 
+      Group , Race_ethnicity , Public.Asstce , Use.Tob , N.prev.preg , Live.PTB , BL.GE , BL..BOP , BL..PD.4 , BL..CAL.3
+  )
+
+# impute Race_ethnicity, Use.Tob with the most common value 
+
+# impute Birthweight, N.prev.preg with median values 
+
+modeling_data[is.na(modeling_data$Birthweight), ]$Birthweight <- median(modeling_data$Birthweight, na.rm = T)
+modeling_data[is.na(modeling_data$N.prev.preg), ]$N.prev.preg <- median(modeling_data$N.prev.preg, na.rm = T)
+
+modeling_data[is.na(modeling_data$Race_ethnicity), ]$Race_ethnicity <- names(which.max(table(modeling_data$Race_ethnicity)))
+modeling_data[is.na(modeling_data$Use.Tob), ]$Use.Tob <- names(which.max(table(modeling_data$Use.Tob)))
+
+
+```
+
+### Unadjusted Treatment effect for reduction in pre-term pregnancies 
+
+  
+```{r work to get unadjusted ATE for pregnancy reductions }
+mean_trt = 
+  length(which(modeling_data$`Preg.ended...37.wk` == "Yes" & modeling_data$Group == "T"))/ 
+  length(which(modeling_data$Group == "T"))
+
+se_mean_trt = sqrt(mean_trt * (1 - mean_trt)/length(which(modeling_data$Group == "T")))
+
+
+mean_c = 
+  length(which(modeling_data$`Preg.ended...37.wk` == "Yes" & modeling_data$Group == "C"))/ 
+  length(which(modeling_data$Group == "C"))
+
+se_mean_c = sqrt(mean_c * (1 - mean_c)/length(which(modeling_data$Group == "C")))
+
+diff = mean_trt - mean_c
+pooled_se_diff = sqrt(se_mean_c ^ 2 + se_mean_trt ^ 2)
+
+test = (diff - 0)/pooled_se_diff
+
+```
+
+  
+  *   Unadjusted Average Treatment Effect (ATE) is the difference is proportions of pre-term pregnancies 
+  
+  *   Control group experienced `r round(mean_c, 3)*100`% of pre-term pregnancies
+  
+  *   Treatment group experienced `r round(mean_trt, 3)*100`% of pre-term pregnancies
+  
+  *   Average Treatment Effect is the difference between two means, which is `r round(diff, 3)*100`
+  
+  *   Variance of the difference for two independent random variables is the sum of their variances, which works out to be 
+    `r round(pooled_se_diff^2, 6)`. Therefore, standard error for the test is `r round(pooled_se_diff, 4)`
+    
+  *   In order to see if the the proportion decreased for the treatment group, compared with the control group, 
+    we perform a one sided z-test: 
+  *  5% percentile of a standard normal is -1.65
+
+  *   test statistic is $\frac{0.0327 - 0}{0.027} = -1.18$
+
+  *   Since the test statistic is does not fall below the cutoff, we conclude that there are no statistically
+        significant differences in the proportion of pre-term pregnancies between the control and treatment 
+        groups
+            
+  * Conclusion: 
+  
+    - Treatment effect: `r round(diff, 3)`      
+    
+    - Standard error `r round(pooled_se_diff, 3)`
+    
+    - 95% Confidence interval: (`r round(diff - 1.96*pooled_se_diff, 3)`, `r round(diff + 1.96*pooled_se_diff, 3)`)
+        
+### Unadjusted Treatment effect for increase in infant birthweights
+
+```{r work to get unadjusted ATE for birthweight increase }
+
+modeling_data %>% 
+  group_by(Group) %>% 
+  summarise(
+    nas = sum(is.na(Birthweight)), 
+    mean = mean(Birthweight, na.rm = T), 
+    se = sd(Birthweight, na.rm = T)/sqrt(n())
+  ) %>% 
+  ungroup() -> summ_stats
+
+mean_c <- summ_stats %>% filter(Group == "C") %>% select(mean) %>% unlist()
+mean_trt <- summ_stats %>% filter(Group == "T") %>% select(mean) %>% unlist()
+
+se_mean_c <- summ_stats %>% filter(Group == "C") %>% select(se) %>% unlist()
+se_mean_trt <- summ_stats %>% filter(Group == "T") %>% select(se) %>% unlist()
+
+diff = mean_trt - mean_c
+
+pooled_se_diff = sqrt(se_mean_c ^ 2 + se_mean_trt ^ 2)
+
+test = (diff - 0)/pooled_se_diff
+
+```
+
+  
+  *   Unadjusted Average Treatment Effect (ATE) is the difference is average birthweights between the two groups 
+  
+  *   Control group showed average birthweight of `r round(mean_c, 1)`
+  
+  *   Treatment group showed average birthweight of  `r round(mean_trt, 1)`
+  
+  *   Average Treatment Effect is the difference between two means, which is `r round(diff, 1)`
+  
+  *   Variance of the difference for two independent random variables is the sum of their variances, which works out to be 
+    `r round(pooled_se_diff^2, 2)`. Therefore, standard error for the test is `r round(pooled_se_diff, 2)`
+    
+  *   In order to see if the the proportion decreased for the treatment group, compared with the control group, 
+    we perform a one sided z-test: 
+    
+  *   95% percentile of a standard normal is 1.65
+    
+  *   test statistic is $\frac{78.33922 - 55.63465}{0.027} = 1.408101$
+
+  *   Since the test statistic is does not fall above the cutoff, we conclude that there are no statistically
+      significant differences in the proportion of pre-term pregnancies between the control and treatment 
+      groups
+            
+  * Conclusion: 
+  
+    - Treatment effect: `r round(diff, 3)`      
+    
+    - Standard error `r round(pooled_se_diff, 3)`
+    
+    - 95% Confidence interval: (`r round(diff - 1.96*pooled_se_diff, 3)`, `r round(diff + 1.96*pooled_se_diff, 3)`)
+        
+
+# Problem 3 
+
+### average (causal) treatment effect for pre-term pregnancy rates
+
+In order to estimate potential outcomes $Y^1$ and $Y^0$ for each patient we fit the following regression model: 
+
+```{r regression model for pregnancy }
+#| echo: true
+pregnancy_model <- 
+  glm(
+    `Preg.ended...37.wk` ~ 
+      Group + Race_ethnicity + Public.Asstce + Use.Tob + N.prev.preg + 
+      Live.PTB + BL.GE + BL..BOP + BL..PD.4 + BL..CAL.3, 
+    
+    data = modeling_data, 
+    family = "binomial"
+  )
+```
+
+```{r create data for potential outcomes pregnancy }
+
+all_no_treat <- modeling_data %>% 
+  select(-Group) %>% 
+  mutate(Group = "C")
+
+all_no_treat$porential_no_trt <- predict(pregnancy_model, all_no_treat , type = "response")
+
+all_treat <- modeling_data %>% 
+  select(-Group) %>% 
+  mutate(Group = "T")
+
+all_treat$porential_trt <- predict(pregnancy_model, all_treat , type = "response")
+
+```
+
+Using this model, we obtain $E [Y^1] =$ `r round(mean(all_treat$porential_trt, na.rm = T), 2)` and 
+$E [Y^0] =$ `r round(mean(all_no_treat$porential_no_trt, na.rm = T), 2)`. 
+
+```{r}
+mean(all_treat$porential_trt, na.rm = T) - mean(all_no_treat$porential_no_trt, na.rm = T) -> te
+```
+
+Therefore, the average causal treatment effect is `r round(te, 2)`
+
+```{r}
+K = 5000
+```
+
+```{r boostrap standard error for pregnancy ATE}
+#| eval: false 
+
+
+ates <- 
+  data.frame(
+    i = seq(from = 1, to = K, by = 1)
+  ) %>% 
+  mutate(ate = NA)
+
+set.seed(976786)
+for(i in 1:K){
+  
+  iter_data = modeling_data[sample(1:nrow(modeling_data), replace = T), ]
+  
+  iter_pregnancy_model <- 
+    glm(
+      `Preg.ended...37.wk` ~ 
+        Group + Race_ethnicity + Public.Asstce + Use.Tob + N.prev.preg + Live.PTB + BL.GE + BL..BOP + BL..PD.4 + BL..CAL.3, 
+      
+      data = iter_data, 
+      family = "binomial"
+    )
+  
+  iter_data_all_c = iter_data %>% 
+    select(-Group) %>% 
+    mutate(Group = "C")
+  
+  iter_data_all_c$porential_no_trt <- predict(iter_pregnancy_model, iter_data_all_c , type = "response")
+
+  iter_data_all_trt = iter_data %>% 
+    select(-Group) %>% 
+    mutate(Group = "T")
+  
+  iter_data_all_trt$porential_trt <- predict(iter_pregnancy_model, iter_data_all_trt , type = "response")
+    
+  iter_ate = mean(iter_data_all_trt$porential_trt, na.rm = T) - mean(iter_data_all_c$porential_no_trt, na.rm = T)
+  
+  ates$ate[i] = iter_ate
+}
+
+write_csv(ates, "pregnancy ate bootsrap.csv")
+```
+
+```{r adjusted ate for pregnancy}
+
+ates <- read_csv("pregnancy ate bootsrap.csv") 
+
+```
+
+Using a bootstrap procedure with `r K` replications, we obtain a standard error for the average causal treatment effect of 
+`r round(sd(ates$ate), 2)`
+
+Therefore, using regression models and bootstrap procedure we obtain: 
+
+  * Average causal treatment effect: `r round(te, 2)`
+  
+  * Standard error of the average causal treatment effect: `r round(sd(ates$ate), 2)`
+  
+  * 95% Confidence interval: (`r round(te - 1.95*sd(ates$ate),2)`, `r round(te + 1.95*sd(ates$ate),2)`)
+
+### average (causal) treatment effect for average birthweights 
+
+In order to estimate potential outcomes $Y^1$ and $Y^0$ for each patient we fit the following regression model: 
+
+```{r regression model for birthweight }
+#| echo: true 
+borthweight_model <- 
+  lm(
+    Birthweight ~ 
+    Group *(Race_ethnicity + Public.Asstce + Use.Tob + 
+              N.prev.preg + Live.PTB + BL.GE + BL..BOP + 
+              BL..PD.4 + BL..CAL.3), 
+    
+    data = modeling_data
+  )
+```
+
+```{r create data for potential outcomes birthweight }
+
+all_no_treat <- modeling_data %>% 
+  select(-Group) %>% 
+  mutate(Group = "C")
+
+all_no_treat$porential_no_trt <- predict(borthweight_model, all_no_treat , type = "response")
+
+all_treat <- modeling_data %>% 
+  select(-Group) %>% 
+  mutate(Group = "T")
+
+all_treat$porential_trt <- predict(borthweight_model, all_treat , type = "response")
+
+```
+
+
+Using this model, we obtain $E [Y^1] =$ `r round(mean(all_treat$porential_trt, na.rm = T), 2)` and 
+$E [Y^0] =$ `r round(mean(all_no_treat$porential_no_trt, na.rm = T), 2)`. 
+
+```{r estimating tretment effect for birthweight outcome}
+
+mean(all_treat$porential_trt, na.rm = T) - mean(all_no_treat$porential_no_trt, na.rm = T) -> te
+```
+
+Therefore, the average causal treatment effect is `r round(te, 2)`
+
+```{r boostrap standard error for birthweight ATE}
+#| eval: false
+
+ates <- 
+  data.frame(
+    i = seq(from = 1, to = K, by = 1)
+  ) %>% 
+  mutate(ate = NA)
+
+set.seed(9766786)
+for(i in 1:K){
+  
+  if(i %% 100 == 0){paste("ON", i)}
+  
+  iter_data = modeling_data[sample(1:nrow(modeling_data), replace = T), ]
+  
+  iter_birthweight_model <- 
+      lm(
+         Birthweight ~ 
+              Group *(Race_ethnicity + Public.Asstce + Use.Tob + 
+                        N.prev.preg + Live.PTB + BL.GE + BL..BOP + BL..PD.4 + BL..CAL.3), 
+    
+        data = iter_data
+    
+      )
+  
+  iter_data_all_c = iter_data %>% 
+    select(-Group) %>% 
+    mutate(Group = "C")
+  
+  iter_data_all_c$porential_no_trt <- predict(iter_birthweight_model, iter_data_all_c , type = "response")
+
+  iter_data_all_trt = iter_data %>% 
+    select(-Group) %>% 
+    mutate(Group = "T")
+  
+  iter_data_all_trt$porential_trt <- predict(iter_birthweight_model, iter_data_all_trt , type = "response")
+    
+  iter_ate = mean(iter_data_all_trt$porential_trt, na.rm = T) - mean(iter_data_all_c$porential_no_trt, na.rm = T)
+  
+  ates$ate[i] = iter_ate
+}
+
+write_csv(ates, "birthweight ate bootsrap.csv")
+```
+
+```{r adjusted ate for birthweight}
+
+ates <- read_csv("birthweight ate bootsrap.csv") 
+
+```
+
+
+Using a bootstrap procedure with `r K` replications, we obtain a standard error for the average causal treatment effect of 
+`r round(sd(ates$ate), 2)`
+
+Therefore, using regression models and bootstrap procedure we obtain: 
+
+  * Average causal treatment effect: `r round(te, 2)`
+  
+  * Standard error of the average causal treatment effect: `r round(sd(ates$ate), 2)`
+  
+  * 95% Confidence interval: (`r round(te - 1.95*sd(ates$ate),2)`, `r round(te + 1.95*sd(ates$ate),2)`)
+

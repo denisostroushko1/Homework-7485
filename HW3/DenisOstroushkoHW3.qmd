@@ -1,0 +1,728 @@
+---
+title: "Denis Ostroushko - HW3"
+format: 
+  pdf:
+    toc: false
+execute: 
+  echo: false
+  warning: false
+  message: false
+---
+
+
+```{r read packages }
+total_nchar = nchar(getwd())
+remove_nchar = nchar("HW1")
+path = substr(getwd(), 1, total_nchar - remove_nchar)
+source(paste0(path,"Master Packages.R"))
+```
+
+```{r read in data}
+data1 <- load("OPT_Study_PUBH7485_8485_2023.Rdata")
+
+# Notice that the result of this function is not assigned to an object name. When R calls load(), all of the R objects saved in the file are loaded into R. The names given to these objects when they were originally saved will be given to them when they are loaded. The command >  ls() can be used to print out all of the objects currently loaded into R.
+
+# https://higgi13425.github.io/medicaldata/reference/opt.html
+
+#     summary(data)
+```
+
+# Introduction 
+
+### Imputation and Variable Processing 
+
+For the purpose of this assignment we retain the same imputation schemes we used in the previous two assignments. 
+We will use imputation with the median of observed values and replace missing values with modes for categorical predictors. 
+
+Since we will need to create two models that have all possible confounders in the data set, we need to be careful with 
+variable inclusion. We drop variable `Hisp` because it is highly correlated with other variables that contain race and 
+ethnic information. We also `Drug.Add` due to the issues with its imputation. When imputed with the most common level 
+"No", which indicated no drug use, this variable has one unique level. Such zero variance predictors can cause problems 
+with fitting models, so we will avoid using it in our analyses. 
+
+Variables `BMI`, `BL.Cig.Day`, `BL.Drks.Day`, `N.living.kids` are imputed with medians like `N.prev.preg`, `Birthweight` in 
+the previous assignments. 
+
+`Use.Alc`  is imputed with a mode like `Race_ethnicity`, `Use.Tob`
+
+```{r imputation and data set preparation }
+## imputation 
+
+median_bw <- median(data$Birthweight, na.rm = T)
+median_npp <- median(data$N.prev.preg, na.rm = T)
+median_bmi <- median(data$BMI, na.rm = T)
+median_bl_cig <- median(data$BL.Cig.Day, na.rm = T)
+median_bl_drinks <- median(data$BL.Drks.Day, na.rm = T)
+median_kids <- median(data$N.living.kids, na.rm = T)
+
+# mode_drug <- 
+#   names(
+#     (table(data$Drug.Add) %>% sort())[length(table(data$Drug.Add))]
+#     )
+
+mode_alc <- 
+  names(
+    (table(data$Use.Alc) %>% sort())[length(table(data$Use.Alc))]
+    )
+
+mode_race <- 
+  names(
+    (table(data$Race_ethnicity) %>% sort())[length(table(data$Race_ethnicity))]
+    )
+
+mode_tob <- 
+  as.character(names(
+    (table(data$Use.Tob) %>% sort())[length(table(data$Use.Tob))]
+    ))
+
+data[is.na(data$Race_ethnicity), ]$Race_ethnicity <- mode_race
+data[is.na(data$Use.Tob), ]$Use.Tob <- mode_tob
+data[is.na(data$N.prev.preg), ]$N.prev.preg <- median_npp
+data[is.na(data$Birthweight), ]$Birthweight <- median_bw
+data[is.na(data$BMI), ]$BMI <- median_bmi
+data[is.na(data$BL.Cig.Day), ]$BL.Cig.Day <- median_bl_cig
+data[is.na(data$BL.Drks.Day), ]$BL.Drks.Day <- median_bl_drinks
+data[is.na(data$N.living.kids), ]$N.living.kids <- median_kids
+# data[is.na(data$Drug.Add), ]$Drug.Add <- mode_drug
+data[is.na(data$Use.Alc), ]$Use.Alc <- mode_alc
+
+
+data <- 
+  data %>% 
+  select(-Hisp, - Drug.Add)
+
+```
+
+# Problem 1
+
+Instead of writing equations for each model, I provide formatted coke chunks that contain model statements. 
+
+### Logistic regression - A
+
+```{r train all models -A }
+#| echo: true
+logistic_regression_a <- 
+  glm(
+    I(data$Group == "T") %>% as.numeric() ~ 
+      
+        Race_ethnicity + Public.Asstce +
+        Use.Tob + Live.PTB + 
+      
+        N.prev.preg + BL.GE + BL..BOP + BL..PD.4 + BL..CAL.3, 
+          
+    data = data, 
+    family = "binomial"
+  )
+```
+
+### Logistic regression - B
+
+For these non-linear terms, I selected polynomial degrees that minimize AIC, to some reasonable degree. 
+
+```{r train model B }
+#| echo: true 
+logistic_regression_b <- 
+  glm(
+    I(data$Group == "T") %>% as.numeric() ~ 
+      
+        Race_ethnicity + Public.Asstce +
+        Use.Tob + Live.PTB + 
+      
+        poly(N.prev.preg,2) + 
+        poly(BL.GE,5) + 
+        poly(BL..BOP,5) + 
+        poly(BL..PD.4,5) + 
+        poly(BL..CAL.3, 2), 
+          
+    data = data, 
+    family = "binomial"
+  )
+```
+
+### Logistic Regresson - C
+
+I decided to use forward selection. After a few trials I determined that forward variable selection includes less variables 
+into the final output, while providing similar AIC. Also, when I compared SMD balance, forward stepping variable selection 
+resulted in smaller SMD of the balanced covariates sets. 
+
+```{r train model c}
+#| echo: true 
+logistic_regression_c_full <- 
+  glm(
+    I(data$Group == "T") %>% as.numeric() ~ 
+      
+        (Race_ethnicity + Public.Asstce +
+        Use.Tob + Live.PTB + 
+      
+        N.prev.preg + BL.GE + BL..BOP + BL..PD.4 + BL..CAL.3)^2, 
+          
+    data = data, 
+    family = "binomial"
+  )
+
+
+logistic_regression_c_lower <- 
+  glm(I(data$Group == "T") %>% as.numeric() ~ 1,
+      data, family = "binomial")
+
+logistic_regression_c <- 
+  MASS::stepAIC(logistic_regression_c_lower, 
+                direction = "forward", 
+                trace = 0, 
+                scope = list(upper = logistic_regression_c_full, 
+                             lower = logistic_regression_c_lower)
+                )
+
+```
+
+### Logistic Regression - D
+
+```{r train model d}
+#| echo: true 
+
+# remove variables that are other outcomes, or IDs
+data2 = 
+  data %>% 
+    select(- PID, - Birth.outcome, - 
+             GA.at.outcome, -Preg.ended...37.wk, 
+           -Birthweight) %>% 
+  mutate(Race_ethnicity = as.factor(Race_ethnicity))
+
+logistic_regression_d_full <- 
+  glm(
+    I(data$Group == "T") %>% as.numeric() ~ ., 
+    data = data2, 
+    family = "binomial"
+  )
+
+logistic_regression_d <- 
+  MASS::stepAIC(
+    logistic_regression_c_lower, 
+    direction = "forward", 
+    trace = 0, 
+    scope = list(upper = logistic_regression_d_full, 
+                 lower = logistic_regression_c_lower)
+    )
+```
+
+### Flexible Regression - Random Forest 
+
+```{r train model e}
+#| echo: true 
+rf = randomForest(
+  Group ~ ., 
+  data = data2 , 
+  ntree = 1000
+)
+```
+
+```{r SMDs calculation }
+
+replace_extremes = 
+  function(x){
+    x = case_when(
+      x == 0 ~ 0.1 * 10e-15,
+      x == 1 ~ x-0.1 * 10e-15, 
+      T ~ x
+    )
+    
+    return(x)
+  }
+
+Variables = c(
+    "Race_ethnicity", "Public.Asstce", "Use.Tob", "Live.PTB",  
+     "N.prev.preg", "BL.GE", "BL..BOP", "BL..PD.4", "BL..CAL.3"
+  )
+
+other_vars <- 
+  setdiff(
+    colnames(data2),
+    Variables
+  )
+other_vars <- other_vars[other_vars != "Group"]
+
+### also apparently David wants the whole table here. So we need to include all vairables 
+
+CreateTableOne(
+  data = data, 
+  strata = "Group", 
+  vars = c(Variables, other_vars), 
+  test = F, 
+  smd = T
+) -> raw_table_1
+
+ExtractSmd(raw_table_1) ->  raw_SMD
+
+# create weighted tables now: 
+trt <- ifelse(data$Group == "T", 1, 0)
+
+###
+### A ### 
+# weight is TRT/PS + (1-TRT)/(1-PS)
+ps_a = logistic_regression_a$fitted.values
+weight_a <- trt/ps_a + (1 - trt)/(1- ps_a) 
+weight_a <- replace_extremes(weight_a)
+data_a <- svydesign(ids = ~ 1, data = data, weights = ~ weight_a)
+
+
+tabWeighted_a <- 
+  svyCreateTableOne(
+    vars = c(Variables, other_vars), 
+    strata = "Group",
+    data = data_a, 
+    test = FALSE, 
+    smd = T
+    )
+
+ExtractSmd(tabWeighted_a) ->  SMD_a
+
+### B ### 
+ps_b = logistic_regression_b$fitted.values
+weight_b <- trt/ps_b + (1 - trt)/(1- ps_b) 
+weight_b <- replace_extremes(weight_b)
+data_b <- svydesign(ids = ~ 1, data = data, weights = ~ weight_b)
+
+
+tabWeighted_b <- 
+  svyCreateTableOne(
+    vars = c(Variables, other_vars), 
+    strata = "Group",
+    data = data_b, 
+    test = FALSE, 
+    smd = T
+    )
+
+ExtractSmd(tabWeighted_b) ->  SMD_b
+
+### C ### 
+p_c = predict(logistic_regression_c, data, type = "response")
+weight_c <- trt/p_c + (1 - trt)/(1- p_c) 
+weight_c <- replace_extremes(weight_c)
+data_c <- svydesign(ids = ~ 1, data = data, weights = ~ weight_c)
+
+
+tabWeighted_c <- 
+  svyCreateTableOne(
+    vars = c(Variables, other_vars), 
+    strata = "Group",
+    data = data_c, 
+    test = FALSE, 
+    smd = T
+    )
+
+ExtractSmd(tabWeighted_c) ->  SMD_c
+
+### D ### 
+p_d = logistic_regression_d$fitted.values
+weight_d <- trt/p_d + (1 - trt)/(1- p_d)
+weight_d <- replace_extremes(weight_d)
+data_d <- svydesign(ids = ~ 1, data = data, weights = ~ weight_d)
+
+
+tabWeighted_d <- 
+  svyCreateTableOne(
+    vars = c(Variables, other_vars), 
+    strata = "Group",
+    data = data_d, 
+    test = FALSE, 
+    smd = T
+    )
+
+ExtractSmd(tabWeighted_d) ->  SMD_d
+
+### RF ### 
+p_e = rf$votes[,2]
+weight_e <- trt/p_e + (1 - trt)/(1- p_e)
+weight_e <- replace_extremes(weight_e)
+data_e <- svydesign(ids = ~ 1, data = data, weights = ~ weight_e)
+
+
+tabWeighted_rf <- 
+  svyCreateTableOne(
+    vars = c(Variables, other_vars), 
+    strata = "Group",
+    data = data_e, 
+    test = FALSE, 
+    smd = T
+    )
+
+ExtractSmd(tabWeighted_rf) ->  SMD_e
+
+#### ALL #####
+
+all_SMDs = 
+  rbind(
+    data.frame(SMD_e) %>% mutate(type = "Random Forest", variable = rownames(.)),
+    data.frame(SMD_d) %>% mutate(type = "Logistic Regression D", variable = rownames(.)),
+    data.frame(SMD_c) %>% mutate(type = "Logistic Regression C", variable = rownames(.)),
+    data.frame(SMD_b) %>% mutate(type = "Logistic Regression B", variable = rownames(.)),
+    data.frame(SMD_a) %>% mutate(type = "Logistic Regression A", variable = rownames(.)),
+    data.frame(raw_SMD) %>% mutate(type = "Unadjusted", variable = rownames(.))
+  )  %>% 
+  mutate(
+    variable = factor(variable, 
+                      levels = c(Variables, other_vars))
+  )
+```
+
+Having obtained five sets of propensity scores, we can created five sets of weighted SMDs for all covariates, i.e. potential 
+confounders. We contrast five sets of SMDs and weighted SMD on @fig-smds. 
+
+A black vertical line is set at 0.1, as we consider any SMD beyond 0.1 to be a sign of possible imbalance. 
+
+A blue horizontal line separates covariates we 
+explicitly called in some models from the rest of confounding values. We expect that covariates not explicitly used in 
+confounding control will exhibit higher levels of imbalance. It appears that this is true. It is especially true for 
+logistic regressions models A and B, which used only some predictors. To reiterate, all those predictors are listed below the
+vertical blue line. 
+
+Lastly, due to some fitted probabilities being equal to 1 or 0, I replace these extreme values with numbers that are close 
+to them. For 0, the replacement is `0.1 * 10^-15`, while for 1 the replacement is `1 - 0.1*10^-15`. 
+
+```{r SMD plot}
+#| label: fig-smds
+#| fig-cap: "Comparion of confounding adjustment methods and their impact on SMDs"
+#| fig-width: 10
+#| fig-height: 14
+#| 
+ggplot(data = all_SMDs, 
+       mapping = aes(x = variable , y = X1.vs.2, group = type, color = type)) +
+  geom_point() + 
+  geom_line() + 
+  theme_classic() + 
+  scale_x_discrete(name = "") + 
+  geom_hline(yintercept = 0) + 
+  geom_vline(xintercept = 9, color = "blue", linetype = "dashed", size = 2, alpha = 0.5) + # this should be something minus 9  
+  geom_hline(color = "black", linetype = "dashed", yintercept = 0.1, size = 2, alpha = 0.5) + 
+  theme(
+    legend.position = "bottom"
+  ) +
+  coord_flip() 
+
+```
+
+\newpage 
+
+# Part B
+
+In order to estimate Treatment Effect using a doubly robust, I will propensity scores from logistic regression specified in 
+part A. Additionally, I specify two outcome models, one for each outcome of interest. Definition of two models are given 
+in the code chunks below: 
+
+```{r}
+#| echo: true
+pregnancy_model <- 
+  glm(
+    `Preg.ended...37.wk` ~ 
+      Group + Race_ethnicity + Public.Asstce + Use.Tob + N.prev.preg + 
+      Live.PTB + BL.GE + BL..BOP + BL..PD.4 + BL..CAL.3, 
+    
+    data = data, 
+    family = "binomial"
+  )
+  
+borthweight_model <- 
+  lm(
+    Birthweight ~ 
+    Group *(Race_ethnicity + Public.Asstce + Use.Tob + 
+              N.prev.preg + Live.PTB + BL.GE + BL..BOP + 
+              BL..PD.4 + BL..CAL.3), 
+    
+    data = data
+  )
+```
+
+We consider less flexible regression methods in order to allow a higher chance at specifying at least one model for 
+the doubly robust estimator. We wish to observe that a point estimate for ATE will be consistent with IPW2, but will 
+have a smaller bootstrapped SE. My code for obtaining 500 bootstrap iterations is given in an appendix. 
+
+My code for calculating ATE using AIPW is given below. I am giving a step by step estimation of ATE for both outcomes 
+variables, and will comment of the results one at a time. 
+
+```{r all ate calculations }
+#| echo: true
+# Step 1: get weigths 
+prop_scores = logistic_regression_a$fitted.values
+data_1 <- data_0 <- data
+  
+data_1$Group = "T"
+data_0$Group = "C"
+
+preg_y_1 = predict(object = pregnancy_model, newdata = data_1, type = "response")
+preg_y_0 = predict(object = pregnancy_model, newdata = data_0, type = "response")
+
+bw_y_1 = predict(object = borthweight_model, newdata = data_1)
+bw_y_0 = predict(object = borthweight_model, newdata = data_0)
+
+### record actual outcomes and treatment flags 
+preg_y = ifelse(data$Preg.ended...37.wk == "Yes", 1, 0)
+bw_y = data$Birthweight
+trt_ind = ifelse(data$Group == "T", 1, 0)
+
+  ### Pregnancy ATE   
+  trt_ind * preg_y / prop_scores - 
+    ((trt_ind - prop_scores)/prop_scores) * preg_y_1 -> E_Y_1
+  
+  (1 - trt_ind) * preg_y / (1 - prop_scores) - 
+    ((1 - trt_ind) - (1 - prop_scores))/
+    (1 - prop_scores) * preg_y_0 -> E_Y_0
+  
+  AIPW_preg_ate = mean(E_Y_1 - E_Y_0)
+  
+  ### Birthweight ATE 
+    
+  trt_ind * bw_y / prop_scores - 
+    ((trt_ind - prop_scores)/prop_scores) * bw_y_1 -> E_Y_1
+  
+  (1 - trt_ind) * bw_y / (1 - prop_scores) - 
+    ((1 - trt_ind) - (1 - prop_scores))/
+    (1 - prop_scores) * bw_y_0 -> E_Y_0
+  
+  AIPW_bw_ate = mean(E_Y_1 - E_Y_0)
+```
+
+```{r}
+aipw_res <- read_csv("Augment IPW bootstrap results.csv")
+```
+
+## Pre-term pregnancy AIPW 
+
+* Pre-term pregnancy rate reduction estimate is `r round(AIPW_preg_ate, 2)`, suggesting that the program was responsible 
+for a `r round(AIPW_preg_ate, 2)*100`% reduction in the rates of pre-term pregnancies as a result of program intervention. 
+
+* Bootstrapped standard error is `r round(sd(aipw_res$AIPW_preg_ate), 2)`
+
+* A normal 95% confidence interval for the treatment effect is given by (`r round(AIPW_preg_ate - 1.96 * sd(aipw_res$AIPW_preg_ate), 2)`, `r round(AIPW_preg_ate + 1.96 * sd(aipw_res$AIPW_preg_ate), 2)`)
+
+## Birth weight AIPW
+
+* Average birth weight of newborns increased by `r round(AIPW_bw_ate, 2)`  as a result of program intervention. 
+
+* Bootstrapped standard error is `r round(sd(aipw_res$AIPW_bw_ate), 2)`
+
+* A normal 95% confidence interval for the treatment effect is given by (`r round(AIPW_bw_ate - 1.96 * sd(aipw_res$AIPW_bw_ate), 2)`, `r round(AIPW_bw_ate + 1.96 * sd(aipw_res$AIPW_bw_ate), 2)`)
+
+\newpage 
+
+## Pre-term pregnancies: comparison with previous results 
+
+@fig-preg-ates shows that the variance of all estimators we have considered over the past few weeks. We observe that the 
+variance of Augmented IPW is similar to the IPW2 estimator we considered in the previous assignment. This means that the 
+outcome model was not correctly specified. This tells us that we have either omitted important predictors, or we did not
+consider a correct amount of non-linear or interaction terms to model the likelihood of pre-term pregnancies. 
+
+We also observe that the point estimate matches previous results, showing that the estimator is consistent if we 
+specify just one of the two models. We have high confidence that a glm for pregnancy outcome was misspecified, which means 
+that the propensity score model is likely correctly specified. 
+
+```{r import all old ATE standard error results}
+
+preg_ates_hw1 <- read_csv("/Users/denisostroushko/Desktop/UofM MS/MS 2023 - 2 Fall/PUBH 7485/Homework-7485/HW1/pregnancy ate bootsrap.csv")
+
+preg_ates_hw2 <- read_csv('/Users/denisostroushko/Desktop/UofM MS/MS 2023 - 2 Fall/PUBH 7485/Homework-7485/HW2/prop_strat_pre_term_preg_ATE_bootsrap.csv')
+
+preg_effects <- 
+  data.frame(
+    type = c("Regression", "PSS", "IPW2", "AIPW"), 
+    ate = c(mean(preg_ates_hw1$ate), 
+            mean(preg_ates_hw2$ATE), 
+            mean(preg_ates_hw2$ATE_ipw), 
+            AIPW_preg_ate
+            ), 
+    se = c(sd(preg_ates_hw1$ate), 
+           sd(preg_ates_hw2$ATE),
+           sd(preg_ates_hw2$ATE_ipw), 
+           sd(aipw_res$AIPW_preg_ate))
+  )
+
+```
+
+```{r pregnancy ipw comparisons}
+#| label: fig-preg-ates
+#| fig-cap: "Comparison of Estiamtion Method Varinances for Pre-term pregnancy rate reduction" 
+
+ggplot(data = preg_effects, 
+       aes(x =  type, y =  ate)) + 
+  geom_point(size = 2) + 
+  geom_errorbar(aes(ymin = ate - 1.96 * se, ymax = ate + 1.96 * se), width = 0.25) + 
+  theme_classic() + 
+  
+  theme(
+    title = element_text(size = 8)
+  ) + 
+  
+  
+  geom_hline(yintercept = 0, linetype = "dashed", size = 1, color = "red") + 
+  
+  xlab("Estimation Method") + 
+  ylab("Estiamte with 95% Confidence Interval") + 
+  
+  ggtitle("Comaprison of Three Estiamtion Methods on Average \n Treatment Effect for Pre-Term Pregnancy Reduction Rates")
+
+```
+\newpage  
+
+## Birth weights: comparison with previous results 
+
+```{r}
+
+bw_ates_hw1 <- read_csv("/Users/denisostroushko/Desktop/UofM MS/MS 2023 - 2 Fall/PUBH 7485/Homework-7485/HW1/birthweight ate bootsrap.csv")
+
+bw_ates_hw2 <- read_csv('/Users/denisostroushko/Desktop/UofM MS/MS 2023 - 2 Fall/PUBH 7485/Homework-7485/HW2/prop_strat_birthweight_ATE_bootsrap.csv')
+
+bw_effects <- 
+  data.frame(
+    type = c("Regression", "PSS", "IPW2", "AIPW"), 
+    ate = c(mean(bw_ates_hw1$ate), 
+            mean(bw_ates_hw2$ATE), 
+            mean(bw_ates_hw2$ATE_ipw), 
+            AIPW_bw_ate
+            ), 
+    se = c(sd(bw_ates_hw1$ate), 
+           sd(bw_ates_hw2$ATE),
+           sd(bw_ates_hw2$ATE_ipw), 
+           sd(aipw_res$AIPW_bw_ate))
+  )
+
+```
+
+@fig-bw-ates shows that we likely have the same issue with the AIPW estimator for the birth weights ATE. Variance being 
+similar to IPW2 suggests that the model for the average birth weights was misspecified. 
+
+```{r pregnancy ipw comparisons}
+#| label: fig-bw-ates
+#| fig-cap: "Comparison of Estiamtion Method Varinances for Average Birth Weight Increase" 
+
+ggplot(data = bw_effects, 
+       aes(x =  type, y =  ate)) + 
+  geom_point(size = 2) + 
+  geom_errorbar(aes(ymin = ate - 1.96 * se, ymax = ate + 1.96 * se), width = 0.25) + 
+  theme_classic() + 
+  
+  theme(
+    title = element_text(size = 8)
+  ) + 
+  
+  
+  geom_hline(yintercept = 0, linetype = "dashed", size = 1, color = "red") + 
+  
+  xlab("Estimation Method") + 
+  ylab("Estiamte with 95% Confidence Interval") + 
+  
+  ggtitle("Comaprison of Three Estiamtion Methods on Average \n Treatment Effect for Birth weight change")
+
+```
+
+\newpage 
+
+# Appendix: bootsrap code 
+
+
+```{r bootsrap SMD standard error }
+#| eval: false 
+#| echo: true
+#| 
+K = 500
+
+res <- 
+  data.frame(
+    i = 1:K, 
+    AIPW_preg_ate = NA,
+    AIPW_bw_ate = NA
+  )
+
+set.seed(718297)
+for(i in 1:K){
+  
+  print(i)
+  iter_data = data[sample(1:nrow(data), replace = T), ]
+  
+  #### train propensity score, pregnancy, and birth weights models 
+  iter_prop_score <-  
+    glm(I(iter_data$Group == "T") %>% as.numeric() ~ 
+      
+        Race_ethnicity + Public.Asstce +
+        Use.Tob + Live.PTB + 
+      
+        N.prev.preg + BL.GE + BL..BOP + BL..PD.4 + BL..CAL.3, 
+          
+    data = iter_data, 
+    family = "binomial"
+  )
+  
+  iter_pregnancy_model <- 
+    glm(
+      `Preg.ended...37.wk` ~ 
+        Group + Race_ethnicity + Public.Asstce + Use.Tob + N.prev.preg + 
+        Live.PTB + BL.GE + BL..BOP + BL..PD.4 + BL..CAL.3, 
+      
+      data = iter_data, 
+      family = "binomial"
+    )
+    
+  iter_borthweight_model <- 
+    lm(
+      Birthweight ~ 
+      Group *(Race_ethnicity + Public.Asstce + Use.Tob + 
+                N.prev.preg + Live.PTB + BL.GE + BL..BOP + 
+                BL..PD.4 + BL..CAL.3), 
+      
+      data = iter_data
+    )
+  
+  #### propensity scores, counterfactuals 
+  prop_scores = iter_prop_score$fitted.values
+  
+  iter_data_1 <- iter_data_0 <- iter_data
+  
+  iter_data_1$Group = as.factor("T")
+  iter_data_0$Group = as.factor("C")
+  
+  preg_y_1 = predict(object = iter_pregnancy_model, newdata = iter_data_1, type = "response")
+  preg_y_0 = predict(object = iter_pregnancy_model, newdata = iter_data_0, type = "response")
+  
+  bw_y_1 = predict(object = iter_borthweight_model, newdata = iter_data_1)
+  bw_y_0 = predict(object = iter_borthweight_model, newdata = iter_data_0)
+  
+  ### record actual outcomes and treatment flags 
+  preg_y = ifelse(iter_data$Preg.ended...37.wk == "Yes", 1, 0)
+  bw_y = iter_data$Birthweight
+  trt_ind = ifelse(iter_data$Group == "T", 1, 0)
+  
+  ### Pregnancy ATE   
+  trt_ind * preg_y / prop_scores - 
+    ((trt_ind - prop_scores)/prop_scores) * preg_y_1 -> E_Y_1
+  
+  (1 - trt_ind) * preg_y / (1 - prop_scores) - 
+    ((1 - trt_ind) - (1 - prop_scores))/
+    (1 - prop_scores) * preg_y_0 -> E_Y_0
+  
+  res$AIPW_preg_ate[i] = mean(E_Y_1 - E_Y_0)
+  
+  ### Birthweight ATE 
+    
+  trt_ind * bw_y / prop_scores - 
+    ((trt_ind - prop_scores)/prop_scores) * bw_y_1 -> E_Y_1
+  
+  (1 - trt_ind) * bw_y / (1 - prop_scores) - 
+    ((1 - trt_ind) - (1 - prop_scores))/
+    (1 - prop_scores) * bw_y_0 -> E_Y_0
+  
+  res$AIPW_bw_ate[i] = mean(E_Y_1 - E_Y_0)
+  
+}
+
+write.csv(res, "Augment IPW bootstrap results.csv")
+
+```
+
+```{r}
+#| eval: false 
+
+mean(res$AIPW_preg_ate)
+mean(res$AIPW_preg_ate2)
+
+sd(res$AIPW_preg_ate)
+sd(res$AIPW_preg_ate2)
+
+```

@@ -1,0 +1,1145 @@
+---
+title: "The Effect of Varibale Selection Approaches on MSE of IPW ATE Estimator"
+format: pdf
+execute: 
+  echo: false 
+  warning: false 
+  message: false 
+bibliography: reference.bib
+header-includes: \usepackage{float}
+---
+
+```{r}
+source("Packages.R")
+```
+
+
+
+```{r load and transform needed data }
+
+####### ATE RESULTS 
+
+res.1 <- readRDS(
+  paste0(
+    getwd(), "/simulation results/result1.RDS")
+)
+
+res.2a <- readRDS(
+  paste0(
+    getwd(), "/simulation results/result2a.RDS")
+)
+
+res.2b <- readRDS(
+  paste0(
+    getwd(), "/simulation results/result2b.RDS")
+)
+
+res.2c <- readRDS(
+  paste0(
+    getwd(), "/simulation results/result2c.RDS")
+)
+
+res.3a <- readRDS(
+  paste0(
+    getwd(), "/simulation results/result3a.RDS")
+)
+
+res.3b <- readRDS(
+  paste0(
+    getwd(), "/simulation results/result3b.RDS")
+)
+
+res.3c <- readRDS(
+  paste0(
+    getwd(), "/simulation results/result3c.RDS")
+)
+
+res.4a <- readRDS(
+  paste0(
+    getwd(), "/simulation results/result4a.RDS")
+)
+
+res.4b <- readRDS(
+  paste0(
+    getwd(), "/simulation results/result4b.RDS")
+)
+
+res.5 <- readRDS(
+  paste0(
+    getwd(), "/simulation results/result5.RDS")
+)
+
+res.6 <- readRDS(
+  paste0(
+    getwd(), "/simulation results/result6.RDS")
+)
+
+######### load covariate selection result 
+
+cov.1 <- readRDS(
+  paste0(
+    getwd(), "/simulation results/cov.info1.RDS")
+)
+
+cov.2a <- readRDS(
+  paste0(
+    getwd(), "/simulation results/cov.info2a.RDS")
+)
+
+cov.2b <- readRDS(
+  paste0(
+    getwd(), "/simulation results/cov.info2b.RDS")
+)
+
+cov.2c <- readRDS(
+  paste0(
+    getwd(), "/simulation results/cov.info2c.RDS")
+)
+
+cov.3a <- readRDS(
+  paste0(
+    getwd(), "/simulation results/cov.info3a.RDS")
+)
+
+cov.3b <- readRDS(
+  paste0(
+    getwd(), "/simulation results/cov.info3b.RDS")
+)
+
+cov.3c <- readRDS(
+  paste0(
+    getwd(), "/simulation results/cov.info3c.RDS")
+)
+
+cov.4a <- readRDS(
+  paste0(
+    getwd(), "/simulation results/cov.info4a.RDS")
+)
+
+cov.4b <- readRDS(
+  paste0(
+    getwd(), "/simulation results/cov.info4b.RDS")
+)
+
+cov.5 <- readRDS(
+  paste0(
+    getwd(), "/simulation results/cov.info5.RDS")
+)
+
+cov.6 <- readRDS(
+  paste0(
+    getwd(), "/simulation results/cov.info6.RDS")
+)
+
+##############
+# process covariate selection results 
+
+results <- 
+  cbind(
+    rbind(res.1, res.2a, res.2b, res.2c, 
+          res.3a, res.3b, res.3c, 
+          res.4a, res.4b, res.5, res.6) , 
+    
+    rbind(cov.1, cov.2a, cov.2b, cov.2c, 
+          cov.3a, cov.3b, cov.3c, 
+          cov.4a, cov.4b, cov.5, cov.6) %>% select(overlap.cov, miss.cov, add.cov) 
+) %>% 
+  filter(!(method %in% c("experience based", "pca - 80% of variance"))) %>% 
+  mutate(
+    method = ifelse(method == "best case", "Oracle", method),
+    method = ifelse(method == "experience based (10 covariates)", "experience based", method),
+    method = str_to_title(method),
+    method = ifelse(method == "Ttest", "T-test", method),
+    method = factor(method, levels = c("Oracle", "T-test", "Experience Based", "Adaptive Lasso",
+                                       "Lasso", "Forward Selection")),
+    ATE.ipw2 = ifelse(is.na(ATE.ipw2), ATE.pss, ATE.ipw2),
+    bias.pss = ATE.pss - ATE.true,
+    bias.ipw = ATE.ipw2 - ATE.true,
+    MSE.pss = (ATE.pss - ATE.true)^2,
+    MSE.ipw = (ATE.ipw2 - ATE.true)^2,
+    s.typ = factor(s),
+    grp.m = paste0(method, "; s = ", s), 
+    
+    p_true_selected = overlap.cov/s, 
+    p_total_selected = (add.cov + overlap.cov)/s
+    )
+  
+#########
+# further aggregation of raw results 
+res.m <- results %>% 
+  group_by(method, m, s.typ, s, grp.m) %>%
+  summarise(ATE.true = mean(ATE.true),
+            ATE.pss = mean(ATE.pss),
+            Bias.pss = (mean(bias.pss)),
+            MSE.pss = mean(MSE.pss),
+            R.Bias.pss = (Bias.pss/ATE.true),
+            SE.pss = mean(SE.pss),
+            ATE.ipw2 = mean(ATE.ipw2),
+            Bias.ipw2 = (mean(bias.ipw)),
+            MSE.ipw2 = mean(MSE.ipw),
+            R.Bias.ipw2 = (Bias.ipw2/ATE.true),
+            SE.ipw2 = mean(SE.ipw2)/100,
+            mean_p_true_selected = mean(p_true_selected), 
+            mean_p_total_selected = mean(p_total_selected), 
+            .groups = "keep") %>%
+  ungroup() 
+
+```
+
+# Introduction 
+The average treatment effect (ATE) serves as a crucial measure for evaluating the causal impact of a specific treatment or intervention on an outcome variable. However, randomized experiments are typically necessary to establish a control group closely resembling the intervention group, ensuring accurate ATE estimation. Despite the widespread availability of data today and the relatively lower costs compared to randomized trials, there is a growing interest in leveraging observational (or non-randomized) studies for estimating treatment effects, especially in social sciences, epidemiology, and certain clinical studies.
+
+Inverse probability weighting, a propensity score-based technique, proves valuable for addressing imbalance in study groups within observational studies. Achieving an unbiased estimator, under the assumption of "no unmeasured confoundings," becomes a challenge in constructing a propensity score model. Real-world observational studies often contains substantial sample sizes and a high dimension of potential covariates, exemplified by studies such as @terzic2021periodontal and @butler2023associations, which involve nearly 5,000 samples with hundreds of variables. To enhance the relevance of the study to real-world research, we will initiate the variation of our sample size, starting from 1500 with 50 covariates. 
+
+In the context of high-dimensional datasets, variable selection using machine-learning approaches has become an intriguing topic. In articles such as @RePEc:bla:biomet:v:79:y:2023:i:2:p:903-914 and @lu2018estimating, the authors delve into variable selection for causal inference under ultra-high dimensionality, employing random forest approaches to build the model. This project aims to evaluate the performance of each variable selection method across diverse simulated scenarios. Taking advantage of knowing the truth, we can compare variable selection methods, contributing to a better understanding of these techniques in real-world applications.
+
+# Methods
+### Simulation Design
+#### Covariates
+We will simulate potential $m$ covariates $\mathbf{X} = (X_{1}, ...,X_{m})$ from a multivariate normal distribution $N(\mu, \Sigma)$, where $\mu = 0$. The correlation matrix $\Sigma$ will be generated using the *rcorrmatrix* function from the *clusterGeneration* package. To enhance computational efficiency, the covariates will be simulated in units of 50 columns each. In other words, when considering a scenario with 150 covariates, we will first generate three independent subsets $\mathbf{Z}_{1}, \mathbf{Z}_{2}$, and $\mathbf{Z}_{3}$, where each subset $\mathbf{Z}$ will consist of 50 correlated covariates. Subsequently, we will construct $\mathbf{X}$ as $(\mathbf{Z}_{1}, \mathbf{Z}_{2}, \mathbf{Z}_{3})$.
+
+#### Treatment Assignment and Outcome Models
+##### Selecting True Covariates
+To determine the covariates that will be included in the model, we will first establish the number of true covariates denoted as $s$ that we wish to incorporate. A vector $\mathbf{V} = (V_{1}, ..., V_{m})$ will be generated, where we randomly select $s$ columns to serve as the underlying predictors for the model. Each element in the vector will function as an indicator, determining whether the column from $\mathbf{X}$ will be utilized in the model or not.
+
+##### Generating Coefficients for True Covariates
+For the coefficients of the treatment assignment model, we will generate another vector $\mathbf{U} = (U_{1}, ...,U_{m})$ where $U_{i} \sim \text{Unif(-0.5, 0.5)}$. We then define the vector of coefficients $\boldsymbol{\beta_{A}} = (V_{1}U_{1}, ..., V_{m}U_{m})^{T}$. The final treatment assignment $A$ is determined by a $\text{Bernoulii[expit} (\mathbf{X}\boldsymbol{\beta_{A}})]$.
+
+For the outcome model, we will also generate a vector $\mathbf{R} = (R_{1}, ...,R_{m})$ where $R_{i} \sim \text{Unif(-1, 1)}$. Again, we then define a vector of coefficients $\boldsymbol{\beta_{Y}} = (V_{1}R_{1}, ..., V_{m}R_{m})^{T}$. Potential outcomes $Y^{0}$ and $Y^{1}$ and the observed outcome $Y$ will be:\
+$$
+\begin{aligned}
+\text{Pote}&\text{ntial outcomes:}\\
+&Y^{0} = \mathbf{X}\boldsymbol{\beta_{Y}}\\
+&Y^{1} = \boldsymbol{\alpha}+\mathbf{X}\boldsymbol{\beta_{Y}}\\
+\text{Obse}&\text{vered outcome:}\\
+&Y = A \times Y^{1} + (1-A) \times Y^{0} +\varepsilon\\
+&\text{where } \boldsymbol{\alpha} \text{ is the average treatment effect and } \varepsilon \sim N(0,\delta)
+\end{aligned}
+$$
+\
+The value of $\boldsymbol{\alpha}$ will be determined by solving $\frac{\alpha}{SD(Y^{0})}=0.5$. $\delta$ will be chosen in a way that $R^2\approx0.5$ when fitting linear regression with our outcome on true predictors. Across 100 iterations in each simulating scenario, the same model will be used and only covariates $\mathbf{X} = (X_{1}, ...,X_{m})$ will be regenerate.
+
+#### Simulation Schemes
+$\text{1. Given }m\text{ and }s\text{, generate an indicator vector }\mathbf{V} = (V_{1}, ..., V_{m})\text{ deciding ture covariates.}\\$
+$\text{2. Simulate coefficient vector }\mathbf{U} = (U_{1}, ...,U_{m})\text{ and }\mathbf{R} = (R_{1}, ...,R_{m})\text{ to get }\boldsymbol{\beta_{Y}}\text{.}\\$
+&ensp;$\text{(i) Given }n\text{ and }s\text{, simulate covariate matrix }\mathbf{X}\text{.}\\$
+&ensp;$\text{(ii) Derive potential outcome }Y^{0} = \mathbf{X}\boldsymbol{\beta_{Y}}\text{.}\\$
+&ensp;$\text{(iii) Repeat (i) and (ii) to get 100 replications.}\\$
+$\text{3. Solve ATE (}\alpha\text{) and residual (}\varepsilon \text{) based on the formulas above with all }Y^{0}\text{ from all the 100 replications.}\\$
+$\text{4. Derive } Y^{1} = \boldsymbol{\alpha}+\mathbf{X}\boldsymbol{\beta_{Y}}\text{ and }Y = A \times Y^{1} + (1-A) \times Y^{0} +\varepsilon\\$
+
+### Factors and Simulation Scenarios
+1. Sample Size ($n)$: To evaluate the impact of sample size on the bias and MSE of $\hat{ATE}$, considering that observational studies often involve very large sample sizes, we will vary the sample size. Specifically, we will investigate sizes of 1500, 3000, 4500, and 6000, assessing the effect on MSE across different sample sizes.
+
+2. Number of Potential Covariates ($m$): A crucial aspect of our investigation involves comparing the performance of variable selection methods with the manual selection of covariates based on expertise and experience, simulating real-world research settings. Our goal is to determine if any selection method consistently outperforms others. Given that observational studies often deal with extensive datasets, we will explore three scenarios with varying numbers of covariates: 50, 100, and 150. Despite simulating 50 covariates in a unit for computational efficiency, this approach aligns with the complexities of real-world situations where covariates are inherently intricate, featuring a mix of correlated and independent variables.
+
+3. True Covariates ($s$): We will vary the number of true covariates from 10, 20, to 30. The objective is to examine the impact on MSE as the true model becomes more complex and to assess each variable selection method's efficacy in correctly identifying relevant covariates.
+
+In total, the study contains 36 distinct simulation scenarios, each replicated 100 times. These scenarios include variations in sample size, the number of potential covariates, and the number of true covariates. This comprehensive approach allows us to evaluate the performance of variable selection methods under diverse conditions, providing insights into their robustness and effectiveness in practical research settings.
+
+### Variable Selection Methods
+The objective of this project is to assess the impact on MSE of the IPW ATE estimator when employing different variable selection approaches in modeling the propensity score. The selected methods for modeling the propensity score include Forward Selection, Lasso, Adaptive Lasso, and Experience-based selection. To establish benchmarks for both the best-case and worst-case scenarios, the Oracle method (constructing the propensity score model based on the true covariates) and the t-test for estimating ATE will also be incorporated.
+
+#### Subset Selection - Forward Stepwise Selection
+One advantage of forward selection is that it starts with smaller models. Also, this procedure is less susceptible to collinearity, as discussed by @Chowdhury2020.\
+$\text{1. Let }M_0\text{ denote the null model, which contains no predictors.}\\$
+$\text{2. For }k=0,...,p-1\text{:}\\$
+&ensp;$\text{(a) consider all }p − k\text{ models that add just one new variable to }M_k\\$
+&ensp;$\text{(b) choose the best (smallest deviance) among these }p-k\text{ models and call it }M_{k+1}\\$
+$\text{3. Select a single best model from }M_0,M_1, . . . , M_{p}\text{ using }AIC\text{.}$
+
+#### Shrinkage - Lasso
+LASSO regression, recognized as L1 regularization, is a popular technique used in statistical modeling and machine learning for variable selection and modeling outcome. The LASSO proceeds by adding a penalty term to the coefficients and minimizing a regularized version of least squares: 
+$$
+\sum_{i=1}^{n}(Y_{i}-\beta_{0}-\sum_{j=i}^{m}\beta_{j}X_{ij})^2+\lambda\sum_{j=1}^{m}|\beta_{j}|
+$$
+where $\lambda$ > 0 is a tuning parameter that will be separately determined which will minimizing 10-fold CV MSE.
+
+#### Shrinkage - Adaptvie Lasso
+In the article @Zou2006, Hui Zou demonstrates that the Lasso sometimes exhibits inconsistent variable selection, including noise variables. He illustrates that incorporating weights on the penalty term for each variable, known as the adaptive Lasso, can yield a more stable model compared to the standard Lasso method.\
+The adaptive Lasso estimates $\beta$ by minimizing
+$$
+\sum_{i=1}^{n}(Y_{i}-\beta_{0}-\sum_{j=i}^{m}\beta_{j}X_{ij})^2+\lambda_{n}\sum_{j=1}^{m}\frac{1}{w_{j}}|\beta_{j}|
+$$
+where $w_{j}=|\hat{\beta}_{OLS}|$ and $\lambda_{n}$ is also determined by minimizing 10-fold CV MSE.
+
+#### Experience-based - Selecting 5 Correct and 5 Incorrect Covariates
+In practice, some researchers often select confounders relying on their experience, opting for variables that are more interpretable. However, this approach does not guarantee the inclusion of all confoundings. To assess the MSE and potential bias associated with the selection of incorrect covariates, we will randomly choose 5 true covariates and 5 incorrect covariates for use in the propensity model across all simulation scenarios.
+
+
+```{r table1 methods}
+# Table 1 Methods
+
+tbl1_meth <- data.frame(
+  Methods = c(
+    "Oracle",
+    "T-test",
+    "Experience Based",
+    "Adaptive Lasso",
+    "Lasso",
+    "Forward Selection"
+  ),
+  Short_Description = c(
+    "Model with perfect information, only all true covariates.",
+    "Testing covariates on treatment outcome to see which have a significan\nassociation",
+    "Selecting 5 correct and 5 incorrect covariates",
+    "A regularization method of LASSO by avoiding overfitting with penalizing\nlarge coefficients",
+    "Adds a penalty term to the coefficients and minimizing a penalized version\nof least squares where lambda > 0",
+    "Beginning with a null model, adding covariates that have a significant\nassociation treatment outcome one at a time."
+  )
+)
+
+tbl1_meth_gt <- tbl1_meth %>%
+  gt() %>%
+  tab_header(
+    title = "Table 1: Methods and Descriptions"
+  ) %>%
+  cols_label(
+    Short_Description = "Short Description"
+  ) %>%
+  tab_style(
+    style = cell_text(weight = "bold"),
+    locations = cells_column_labels(columns=c(everything()))
+  ) %>%
+  fmt_number(
+    columns = c(Methods),
+    decimals = 0
+  )
+tbl1_meth_gt
+```
+
+# Results 
+
+In this section, we analyze the outcomes of simulated data replications through a comprehensive examination utilizing data summaries and regression methodologies. We focus on IPW estimator that employs a propensity score model and weighted sample mean differences. Initially, we employ graphical tools to assess the results and compare variable selection techniques with more naive methods for estimating Average Treatment Effects (ATE). Subsequently, our investigation delves into the evaluation of Mean Squared Error (MSE) across varying simulation parameters and diverse variable selection methods. Our objective is to quantify the marginal effects of different conditions on MSE, identifying a variable selection approach that consistently achieves the lowest average MSE. We adopt a Gaussian General Linear Regression Model with an identity link function, incorporating a natural logarithm transformation of MSE to derive main and interaction effects as percentage changes. 
+
+### Simulation Results
+<!-- 
+VErsion 1
+@fig-bias-summary presents Bias and MSE for considered variable selection methods under varying data generating scenarios. We include the two-sample t-test estiamtor as a benchmark for unadjusted ATE estimation. We know that failure to account for confoudners leads to biased estiamtion. Visual confomation of this fact is presented in @fig-bias-summary. Similarly, 'Experience Based' variable selection leads to biased estimates, presumably due to the vialotion of No Unmeasured Confounders assumption. Recall that 'Experience Based' method always selects five true and five random confounders. 
+
+In contrast, bias of data driven variable selection algorithms is centered around zero, and seems to be within an acceptable range. Regardless of the data generation scenario (number of true covaraites) and the size of available data (sample size and total number of available predictors), all methods of variable selection result in an IPW estimator with zero bias, on average, which is an 
+expected behavior for this class of estimators. 
+
+
+Version 2 
+
+The figure labeled @fig-bias-summary illustrates the Bias and Mean Squared Error (MSE) for the various variable selection methods across diverse data generating scenarios. We introduce the two-sample t-test estimator as a benchmark for unadjusted Average Treatment Effect (ATE) estimation. It is acknowledged that neglecting confounders can lead to biased estimation, a fact visually confirmed in @fig-bias-summary. Similarly, the 'Experience-Based' variable selection method yields biased estimates, possibly attributable to a violation of the No Unmeasured Confounders assumption. Notably, the 'Experience-Based' method consistently selects five true and five random confounders.
+
+Conversely, the bias associated with data-driven variable selection algorithms is centered around zero, suggesting acceptability. This observation holds across different data generation scenarios, considering variations in the number of true covariates and the scale of available data (sample size and total number of predictors). Notably, all variable selection methods result in an Inverse Probability Weighting (IPW) estimator with zero bias, on average, aligning with the anticipated behavior for this class of estimators.
+
+--> 
+
+@fig-bias-summary illustrates the Bias and Mean Squared Error (MSE) for the various variable selection methods across diverse data generating scenarios. We introduce the two-sample t-test estimator as a benchmark for unadjusted Average Treatment Effect (ATE) estimation. It is acknowledged that neglecting confounders can lead to biased estimation, a fact visually confirmed in @fig-bias-summary. Similarly, the 'Experience-Based' variable selection method yields biased estimates, possibly attributable to a violation of the No Unmeasured Confounders assumption. Recall that the 'Experience-Based' method consistently selects five true and five random confounders.
+
+Conversely, the bias associated with data-driven variable selection algorithms is centered around zero, suggesting acceptability. This observation holds across different data generation scenarios, considering variations in the number of true covariates and the scale of available data (sample size and total number of predictors). Notably, all variable selection methods result in an Inverse Probability Weighting (IPW) estimator with zero bias, on average, aligning with the anticipated behavior for this class of estimators.
+
+```{r plot - summary of BIAS for IPW and PSS by method and covariate space size }
+#| label: fig-bias-summary 
+#| fig-cap: "CAPTION FOR THIS PLOT REQURIED" 
+#| fig-width: 10
+#| fig-height: 5
+LINES <- c("10" = "solid", "20" = "dashed", "30" = "dotted")
+dodge <- 0
+p1a <- res.m %>% 
+  ggplot(aes(x=m, y=R.Bias.ipw2, group=grp.m, colour=method, linetype = s.typ)) + 
+  geom_point(position=position_dodge(width=dodge), size = 0.75) +
+  geom_line(position=position_dodge(width=dodge)) +
+  scale_x_continuous(breaks = c(50, 100, 150)) +
+  xlab("Total # of Covariates") +
+  ylab("Relative ATE Bias") +
+  labs(title = "",
+       linetype="# of True Covariates", colour="Methods") + 
+  scale_color_manual(values=c("deeppink", "darkgrey", "tan3", "deepskyblue", "yellowgreen", "purple")) +
+  scale_linetype_manual(values = LINES) +
+  theme_bw()
+
+p1b <- res.m %>% 
+  ggplot(aes(x=m, y=MSE.ipw2, group=grp.m, colour=method, linetype = s.typ)) + 
+  geom_point(position=position_dodge(width=dodge), size = 0.75) +
+  geom_line(position=position_dodge(width=dodge)) +
+  scale_x_continuous(breaks = c(50, 100, 150)) +
+  xlab("Total # of Covariates") +
+  ylab("MSE") +
+  labs(title = "",
+       linetype="# of True Covariates", colour="Methods") + 
+  scale_color_manual(values=c("deeppink", "darkgrey", "tan3", "deepskyblue", "yellowgreen", "purple")) +
+  scale_linetype_manual(values = LINES) +
+  scale_y_continuous(trans = "log10", labels = function(x) format(x, scientific = FALSE)) +
+  theme_bw()
+
+p1a + p1b + plot_layout(nrow = 1, guides = "collect") & theme(legend.position = "bottom") & 
+  plot_annotation(title = 'Relative ATE Bias (Bias/True ATE) and MSE for IPW Estimator under varying conditions',
+                  #caption = 'made with patchwork',
+                  theme = theme(plot.title = element_text(size = 16)))
+```
+
+<!-- 
+Version 1 
+
+@fig-bias-summary also incorporates variance of the estimator though Mean Sqaured Error (MSE). We use the number of true confounders as a proxy for the diffuculty of model building taks. We can see that all data driven methods exibit a notable increase in MSE 
+as the number of true confounders that need to be accounted for increases. This increase must be driven by the increase in variance, since the average bias was spread around zero with small variatons for the data driven methods. We speculate that the increase in 
+MSE and variance is driven by the model misspecification. We speculated that as the number of true confounders increases, 
+under random sampling variability, it becomes harder to select all true confounders. We know that for the IPW class of ATE estimators, misspeciyfing the model leads to higher variation of the esimator. The effect of this phenomenon is shown on the 
+right graph in @fig-bias-summary. 
+
+version 2 
+
+@fig-bias-summary also incorporates the variance of the estimator through Mean Squared Error (MSE). We utilize the number of true confounders as a proxy for the difficulty of the model-building task. It is evident that all data-driven methods exhibit a noticeable increase in MSE as the number of true confounders that need to be accounted for rises. This escalation is likely driven by an increase in variance, given the observation that the average bias was consistently distributed around zero with minor variations for the data-driven methods. We postulate that the rise in MSE and variance is a consequence of model misspecification.
+
+Our speculation stems from the understanding that, under random sampling variability, it becomes increasingly challenging to select all true confounders as their number increases. Notably, for the Inverse Probability Weighting (IPW) class of Average Treatment Effect (ATE) estimators, model misspecification leads to higher variation in the estimator. The impact of this phenomenon is illustrated in the right graph in @fig-bias-summary.
+
+---> 
+
+@fig-bias-summary also incorporates the variance of the estimator through Mean Squared Error (MSE). We utilize the number of true confounders as a proxy for the difficulty of the model-building task. It is evident that all data-driven methods exhibit a noticeable increase in MSE as the number of true confounders that need to be accounted for rises. This escalation is likely driven by an increase in variance, given the observation that the average bias was consistently distributed around zero with minor variations for the data-driven methods. We specualte that the rise in MSE and variance is a consequence of model misspecification.
+
+Our speculation stems from the understanding that, under random sampling variability, it becomes increasingly challenging to select all true confounders as their number increases. Notably, for the Inverse Probability Weighting (IPW) class of Average Treatment Effect (ATE) estimators, model misspecification leads to higher variation in the estimator. The impact of this phenomenon is illustrated in the right graph in @fig-bias-summary. 
+
+In unadjusted comparisons, outcome adaptive lasso regression demonstrates behavior that, on average, closely approximates the performance of the 'Oracle' method in situations with a limited number of true covariates. Furthermore, both lasso and forward variable selection methods exhibit nearly identical performance, and their effectiveness diminishes as the number of available variables for selection increases.
+This pattern persists even as the number of true confounders grows. However, as the complexity of the scenarios increases, all methods gradually converge to more similar results in terms of the attained Mean Squared Error (MSE).
+
+
+```{r plot - not valuated summary of MSE for IPW and PSS by method and covariate space size }
+#| eval: false 
+#| label: fig-mse-summary 
+#| fig-cap: "CAPTION FOR THIS PLOT REQURIED" 
+#| fig-width: 10
+#| fig-height: 8
+
+### MSE
+
+p2a <- res.m %>% 
+  ggplot(aes(x=m, y=R.Bias.pss, group=grp.m, colour=method, linetype = s.typ)) + 
+  geom_point(position=position_dodge(width=dodge), size = 0.75) +
+  geom_line(position=position_dodge(width=dodge)) +
+  scale_x_continuous(breaks = c(50, 100, 150)) +
+  xlab("Total # of Covariates") +
+  ylab("Relative ATE Bias") +
+  labs(title = "PSS",
+       linetype="# of True Covariates", colour="Methods") + 
+  scale_color_manual(values=c("deeppink", "darkgrey", "tan3", "deepskyblue", "yellowgreen", "purple")) +
+  scale_linetype_manual(values = LINES) +
+  theme_bw()
+
+p2b <- res.m %>% 
+  ggplot(aes(x=m, y=MSE.pss, group=grp.m, colour=method, linetype = s.typ)) + 
+  geom_point(position=position_dodge(width=dodge), size = 0.75) +
+  geom_line(position=position_dodge(width=dodge)) +
+  scale_x_continuous(breaks = c(50, 100, 150)) +
+  xlab("Total # of Covariates") +
+  ylab("MSE") +
+  labs(title = "PSS",
+       linetype="# of True Covariates", colour="Methods") + 
+  scale_color_manual(values=c("deeppink", "darkgrey", "tan3", "deepskyblue", "yellowgreen", "purple")) +
+  scale_linetype_manual(values = LINES) +
+  scale_y_continuous(trans = "log10", labels = function(x) format(x, scientific = FALSE)) +
+  theme_bw()
+
+p2a + p2b + plot_layout(nrow = 1, guides = "collect") & theme(legend.position = "bottom") & 
+  plot_annotation(title = 'MSE using Different Estimator (IPW v.s. PSS)',
+                  #caption = 'made with patchwork',
+                  theme = theme(plot.title = element_text(size = 16)))
+```
+<!-- 
+
+Version 1 
+
+To evaluate each variable selection method's ability to corectly specify the model we evalaute the average proportion of 
+true confounders selected and the average proportion of all predictors identified by the method to the number of true confoudners. 
+@fig-true-cov-ratio-summary shows that on average, all data driven variable seelction methods to select about 75% to 85% of 
+true confoudners under varing data generating and size conditions. This higher percentage of correctly identified confoudners 
+must be the main reason for low bias performance in all data genrating scenarios. One notable deviation from the overall pattern
+is the steady drop in the number of true confounders as the number of options increases. 
+
+On the other hand @fig-true-cov-ratio-summary shows that as the number of potential predictors grows, every variable selection method tend to increase the ratio of all seelcted predictoers to the number of true predicors. Moreover, on aveage, as the size of true confounder space increases, the ratio of all selected covariates to the number of true confounders drops for eevry method. 
+Presumably, when the number of true confounders is small, every additional irrelevant predicotr added to the model has a bigger impact on this proportion. And the chance of selecting a false positive predictor in the model building process when the number of true confounders is small msut be increasing as well, purely due to the sampling variablity. 
+
+Version 2 
+
+To assess the ability of each variable selection method to accurately specify the model, we examine the average proportion of true confounders selected and the average proportion of all predictors identified by the method in relation to the total number of true confounders. @fig-true-cov-ratio-summary illustrates that, on average, all data-driven variable selection methods select approximately 75% to 85% of true confounders under varying data generation and sample size conditions. This higher percentage of correctly identified confounders is likely the primary factor contributing to low bias performance across all data generating scenarios. Notably, a steady deviation from this overall pattern is observed, indicating a consistent decrease in the number of true confounders as the number of options increases.
+
+Conversely, @fig-true-cov-ratio-summary also demonstrates that, as the number of potential predictors grows, every variable selection method tends to increase the ratio of all selected predictors to the number of true predictors. Additionally, on average, as the size of the true confounder space expands, the ratio of all selected covariates to the number of true confounders decreases for every method. Presumably, when the number of true confounders is small, each additional irrelevant predictor added to the model has a more substantial impact on this proportion. The likelihood of selecting a false positive predictor in the model-building process is expected to increase when the number of true confounders is small, driven by sampling variability.
+
+--> 
+```{r plot - summary of Correct Covariates Selection for IPW and PSS by method and covariate space size }
+#| label: fig-true-cov-ratio-summary 
+#| fig-cap: "CAPTION FOR THIS PLOT REQURIED" 
+#| fig-width: 10
+#| fig-height: 5
+
+### 
+p2a <- res.m %>% 
+  ggplot(aes(x=m, y=mean_p_true_selected, group=grp.m, colour=method, linetype = s.typ)) + 
+  geom_point(position=position_dodge(width=dodge), size = 0.75) +
+  geom_line(position=position_dodge(width=dodge)) +
+  scale_x_continuous(breaks = c(50, 100, 150)) +
+  xlab("Total # of Covariates") +
+  ylab("% of True Selected Predictors against True Predictors") +
+  labs(title = "",
+       linetype="# of True Covariates", colour="Methods") + 
+  scale_color_manual(values=c("deeppink", "darkgrey", "tan3", "deepskyblue", "yellowgreen", "purple")) +
+  scale_linetype_manual(values = LINES) +
+  scale_y_continuous(labels = function(x) paste0(round(x,4)*100, "%")) +
+  theme_bw()
+
+p2b <- res.m %>% 
+  ggplot(aes(x=m, y=mean_p_total_selected, group=grp.m, colour=method, linetype = s.typ)) + 
+  geom_point(position=position_dodge(width=dodge), size = 0.75) +
+  geom_line(position=position_dodge(width=dodge)) +
+  scale_x_continuous(breaks = c(50, 100, 150)) +
+  xlab("Total # of Covariates") +
+  ylab("% of Total Predictors against True Predictors") +
+  labs(title = "",
+       linetype="# of True Covariates", colour="Methods") + 
+  scale_color_manual(values=c("deeppink", "darkgrey", "tan3", "deepskyblue", "yellowgreen", "purple")) +
+  scale_linetype_manual(values = LINES) +
+  scale_y_continuous(labels = function(x) paste0(round(x,4)*100, "%")) +
+  theme_bw()
+
+p2a + p2b + plot_layout(nrow = 1, guides = "collect") & theme(legend.position = "bottom") & 
+  plot_annotation(title = 'Covariate Selection Results Under varying condiitons',
+                  #caption = 'made with patchwork',
+                  theme = theme(plot.title = element_text(size = 16)))
+```
+
+To assess the ability of each variable selection method to accurately specify the model, we examine the average proportion of true confounders selected and the average proportion of all predictors identified by the method in relation to the total number of true confounders. @fig-true-cov-ratio-summary illustrates that, on average, all data-driven variable selection methods select approximately 75% to 85% of true confounders under varying data generation and sample size conditions. This higher percentage of correctly identified confounders is likely the primary factor contributing to low bias performance across all data generating scenarios. Notably, a steady deviation from this overall pattern is observed, indicating a consistent decrease in the number of true confounders as the number of options increases.
+
+Conversely, @fig-true-cov-ratio-summary also demonstrates that, as the number of potential predictors grows, every variable selection method tends to increase the ratio of all selected predictors to the number of true predictors. Additionally, on average, as the size of the true confounder space expands, the ratio of all selected covariates to the number of true confounders decreases for every method. Presumably, when the number of true confounders is small, each additional irrelevant predictor added to the model has a more substantial impact on this proportion. The likelihood of selecting a false positive predictor in the model-building process is expected to increase when the number of true confounders is small, driven by sampling variability.
+
+
+### Main Effects 
+
+<!-- 
+We now employ a Gaussian General Linear Model with an identity link and natural logarithm transformation of each Squared Error to 
+get marginal effects of the considered factors described in the previous section. @tbl-main-effects presents the effects of simualtion paraemters, varaible selection results, and variable seceltion methods as the percent change in MSE. 
+Main effects of variable selection methods are less meaningful in the context of our regression study because we found strong and suggestive evidence that the effect of variable selection method on the percentage change in MSE varies for different number of true confounders. Main effects of variable selection methods are given for scenarios where the number of true confounders is equal to zero, which is meaningless. Insead, we consider the effect of variable selection methods on MSE when compared with the best case 
+scenario (Oracle method). Results are presented in @fig-var-sel-effect. Addtionally, we provide deeper levels of details for the variable selection method performance under different condiditons in @fig-effects-by-S and @fig-effects-by-S-2. 
+
+Version 2 
+
+
+We employ a Gaussian General Linear Model with an identity link and a natural logarithm transformation of each squared error to derive marginal effects of the factors described in the previous section. Table 1 presents the effects of simulation parameters, variable selection results, and variable selection methods as the percent change in MSE.
+
+Main effects of variable selection methods have limited significance in the context of our regression study. We have uncovered strong and suggestive evidence that the impact of variable selection methods on the percentage change in MSE varies with the number of true confounders. Therefore, we present the main effects of variable selection methods for scenarios where the number of true confounders is equal to zero, which is inherently meaningless. Instead, we focus on the effect of variable selection methods on MSE when compared with the best-case scenario (Oracle method). Detailed results are presented in Figure 2. Additionally, we provide a more nuanced exploration of variable selection method performance under different conditions in Figures 3 and 4. These figures offer deeper insights into the effects based on varying simulation parameters and different numbers of true confounders.
+--> 
+
+
+We employ a Gaussian General Linear Model with an identity link and a natural logarithm transformation of each squared error to derive marginal effects of the factors described in the previous section. @tbl-main-effects presents the effects of simulation parameters, variable selection results, and variable selection methods as the percent change in MSE.
+
+
+```{r not - evaluated evaluation of interaction of the variabce estimates }
+#| eval: false 
+model_1 = lm(log(MSE.ipw) ~ m + sqrt(n) + method + s*(p_true_selected + p_false_selected), data = results) 
+model_1 %>% tidy(conf.int = T)  -> no_int_var_comp 
+
+model_1 = lm(log(MSE.ipw) ~ m + sqrt(n) + s*(p_true_selected + p_false_selected + method), data = results) 
+model_1 %>% tidy(conf.int = T)  -> int_var_comp 
+
+ 
+model_1 = lm(log(MSE.ipw) ~
+               method + m + n + s + p_true_selected + p_total_selected +  
+               s:method + p_true_selected:method, data = results) 
+
+model_1 %>% tidy() %>% mutate(signif = ifelse(p.value <= 0.05, 1, 0)) %>% View()
+
+
+all_ <- 
+  left_join(
+    int_var_comp %>% select(term, estimate, conf.low, conf.high) %>% 
+      rename(conf.low.int = conf.low, 
+             conf.high.int = conf.high, 
+             estimate.int = estimate), 
+    
+    no_int_var_comp %>% select(term, estimate, conf.low, conf.high) %>% 
+      rename(conf.low.no_int = conf.low, 
+             conf.high.no_int = conf.high,
+             estimate.no_int = estimate), 
+    
+    by = "term"
+  )  %>% 
+      mutate(int_ci_range = conf.high.int - conf.low.int, 
+             no_int_ci_range = conf.high.no_int - conf.low.no_int, 
+             
+             int_minus_no_int = int_ci_range - no_int_ci_range)
+
+## correlation of factors 
+
+results %>% na.omit() %>% 
+  select(m, n, s, p_true_selected, p_total_selected) %>% cor()
+
+```
+
+\renewcommand{\arraystretch}{2}
+```{r table - main effects of parameter permutation table }
+#| label: tbl-main-effects 
+#| tbl-cap: "Gaussian GLM with log-transformed resposnse effect estiamtes. Coefficients are exponentiated and present the effect as % change" 
+#| 
+model = "main"
+results <- 
+  results %>% 
+  mutate(
+    method = factor(method, 
+                    levels = c('Oracle', 'Adaptive Lasso', 'Lasso', 'Forward Selection', 'Experience Based', "T-test"))
+  )
+if(model == "main"){
+  # model_1 = lm(log(MSE.ipw) ~ m + n + s*(method + p_true_selected) + p_total_selected, data = results) 
+  
+  ## this order of model terms makes the final output much nicer 
+  model_1 = lm(log(MSE.ipw) ~
+                 method + m + n + s + p_true_selected + p_total_selected +  
+                 s:method + s:p_true_selected, data = results) 
+}
+
+if(model == "experimental"){
+  model_1 = lm(log(MSE.ipw) ~ m + n*method + s*(method + p_true_selected) + p_total_selected, data = results) 
+}
+#  model_1 = lm(log(SE.ipw2) ~ m + n + s*(method + p_true_selected) + p_false_selected, data = results) 
+
+rsq <- summary(model_1)$r.squared
+
+# reduced model 
+# model_1 = lm(log(MSE.ipw) ~ m + n + method + s*(overlap.cov + add.cov), data = results) 
+
+main_effect_predictors_n <- 5
+var_sel_methods <- 4 
+# the rest is interaction terms 
+
+model_1 %>% tidy(conf.int = T) %>% 
+  mutate(estimate = case_when(term == "n" ~ estimate * 1000, 
+                              T ~ estimate), 
+         conf.low = case_when(term == "n" ~ conf.low * 1000, 
+                              T ~ conf.low), 
+         conf.high = case_when(term == "n" ~ conf.high * 1000, 
+                              T ~ conf.high)) %>% 
+  filter(term != "(Intercept)") %>% 
+  mutate(exp_estimate = paste0(round(exp(estimate) - 1, 3) * 100, "%"),  
+         ci = paste("(", 
+                    round(exp(conf.low) - 1, 4) * 100, "%", 
+                    ", ",
+                    round(exp(conf.high) - 1, 4) * 100, "%", 
+                    ")"
+                    ), 
+         signif = ifelse(p.value < 0.05, "*", ""), 
+         p.value = round(p.value, 4), 
+         new_term = case_when(
+           term == 'm' ~ "Total Covaraites Available", 
+            term == 'n'	~ "Sample Size", 			
+            term == 's' ~ "Number of True Confounders", 				
+            term == 'methodExperience Based' ~ "Experience Based Selection", 				
+            term == 'methodAdaptive Lasso'	~ "Adaptive Lasso", 			
+            term == 'methodLasso'				~ "Lasso", 
+            term == 'methodForward Selection'		~ "Forward Variable Selection", 		
+            term == 'p_true_selected'				 ~ "% True Confounders Selected", 
+            term == 'p_total_selected'			~ "% Total Covariates Selected", 	
+            term == 'methodExperience Based:s' ~ "Number of True Confounders * Experience Based Selection", 				
+            term == 'methodAdaptive Lasso:s' ~ "Number of True Confounders * Adaptive Lasso", 
+            term == 'methodLasso:s' ~ "Number of True Confounders * Lasso", 
+            term == 'methodForward Selection:s' ~ "Number of True Confounders * Forward Variable Selection", 	
+            term == 's:p_true_selected' ~ "Number of True Confounders * % True Confounders Selected"
+         ) ## make pretty labels here 
+         ) %>% 
+  select(new_term, exp_estimate, ci, p.value, signif)  %>% 
+  kable(booktabs = T, 
+        digits = 4, 
+        align = c('l', 'c', 'c', 'c', 'c'), 
+        col.names = c("Predictor","Estimate", "95% CI", "P-value", "P<0.05")
+        ) %>% 
+  kable_styling(
+    #latex_options = "HOLD_position", 
+    font_size = 8) %>% 
+  column_spec(1, width = "5.5cm") %>% 
+  column_spec(4, width = "1.5cm") %>% 
+  column_spec(5, bold = T, width = "1cm") %>% 
+  
+  pack_rows(start_row = 1, 
+            end_row = var_sel_methods , 
+            group_label = "Variable Selection Methods") %>% 
+  pack_rows(start_row = 1 + var_sel_methods, 
+            end_row = main_effect_predictors_n + var_sel_methods, 
+            group_label = "Other Main Effects") %>% 
+  pack_rows(start_row = 1 + var_sel_methods + main_effect_predictors_n, 
+            end_row = (model_1 %>% tidy() %>% nrow())-1,  # end packing of rows 
+            group_label = "Intercation Terms") %>% 
+  
+  add_footnote(paste0("Regression model explains ", round(rsq, 4)*100, "% of variation in Squared Errors of IPW estimator")) %>% 
+  add_footnote("Variable selection methods are compared with the refernce 'Oracle' level")
+
+```
+\renewcommand{\arraystretch}{1}
+<!-- 
+We evaluated the marginal effect of increase in the number of true covariates. We considered the size of true confounder space 
+as a factor measiring the diffuculty of the model building and variable seelciton task. We estimated that with each additional 
+true confounder, on average MSE will increase by 4.6% ( -0.32 % to 9.73 % 95% CI), after adjusting for other variable. This result is strongly suggestive (P = 0.067), but not strong enough at the considered significance level $\alpha = 0.05$. We also acknowledge that as the number of true predcitors extends beyond 30, these results might no be generalizeable. We address these details in the discussion section. 
+--> 
+
+
+Main effects of variable selection methods have limited significance in the context of our regression study. We have uncovered strong and suggestive evidence that the impact of variable selection methods on the percentage change in MSE varies with the number of true confounders. Therefore, we present the main effects of variable selection methods for scenarios where the number of true confounders is equal to zero, which is inherently meaningless. Instead, we focus on the effect of variable selection methods on MSE when compared with the best-case scenario (Oracle method) under varying numbers of true confounders. Detailed results are presented in @fig-var-sel-effect. Additionally, we provide a more nuanced exploration of variable selection method performance under different conditions in @fig-effects-by-S and @fig-effects-by-S-2. These figures offer deeper insights into the effects based on varying simulation parameters and different numbers of true confounders.
+
+We assessed the marginal effect of an increase in the number of true covariates, considering the size of the true confounder space as a factor measuring the difficulty of the model-building and variable selection task. Our estimation indicates that, with each additional true confounder, the average Mean Squared Error (MSE) is expected to increase by 4.6% (95% CI: -0.32% to 9.73%), after adjusting for other variables. While this result shows a strong suggestive trend (P = 0.067), it falls short of significance at the considered level of $\alpha = 0.05$. Additionally, we acknowledge a potential limitation; as the number of true predictors extends beyond 30, these findings may not be generalizable. A more in-depth discussion on these nuances is provided in the subsequent discussion section.
+
+@fig-var-sel-effect shows the effect of varaible selection method on MSE, and contrasted with the Oracle method. It is expected that the Oracle method will correctly specity the model at all times and therefore variance of an IPW esimator will only depend on 
+the sampling variablity. As expected, this estimator has the lowest MSE through lowest bias and variance because model misspecificiation does not occur. 
+
+@tbl-main-effects provides expected percentage increase in MSE for each varaible selection mehtod under different data generating 
+schemes, after adjsting for other variables, while @fig-var-sel-effect compares and contrast expected MSE under our regression model for every variable selection method and true confounder space size. 
+
+```{r coefficient calcualtors, eval = F}
+
+summary(model_1)
+vcov(model_1)
+
+```
+
+<!-- 
+In a scenario with relatively low number of true confounders, adaptive lasso variable seelction produces IPW estiamtor with MSE almost identical to the best case scenrio. We estimate that the average chagne in MSE for IPW based on adaptive lasso variable selection when compared with IPW based on all true covariates was PLACEHOLDER (), when the number of true covariates was 10, after adjusting for other predictors. See appendix for the summary of exact estiamtes for all variable seelction methods under different values of true covariate space size. 
+
+Overall,  @fig-margin-effect-s-int shows that in the situaiton with low number of true predictors, Oracle based and Outcome Adaptive Lasso procude IPW estiamtors that have similar MSE, which also the lowest possible under our data generating specifications. 
+Lasso regression and Forward Variable Selection methods procude IPW estimators with higher MSE, as evidenced by mostly non-overallping confidence intervals. In a situaion with a low number of true covariates 'Experience Based' method of variable selection results in the highest amount of MSE, although not hugely different from Lasso and Forward Selection approaches. 
+
+As we increase the number of true covaraites and make the task of model building via variable selection harder. We observed that 
+all data-driven methods produce estimator that coverge to the same value of MSE, while 'Experience Based' approach tends to perform worse and worse and the numnber of true covariates grows. While this finding was not expected, it still can have a possible explanation when we consider bias-variance trade off in the discussion section. 
+
+Version 2 
+
+In a scenario with a relatively low number of true confounders, adaptive lasso variable selection produces an Inverse Probability Weighting (IPW) estimator with Mean Squared Error (MSE) almost identical to the best-case scenario. We estimate that the average change in MSE for IPW based on adaptive lasso variable selection, compared with IPW based on all true covariates, was PLACEHOLDER () when the number of true covariates was 10, after adjusting for other predictors. For detailed estimates for all variable selection methods under different values of true covariate space size, please refer to the appendix.
+
+Overall, Figure 1 shows that in situations with a low number of true predictors, Oracle-based and Outcome Adaptive Lasso produce IPW estimators with similar MSE, which is also the lowest possible under our data-generating specifications. Lasso regression and Forward Variable Selection methods yield IPW estimators with higher MSE, as evidenced by mostly non-overlapping confidence intervals. In a situation with a low number of true covariates, the 'Experience-Based' method of variable selection results in the highest amount of MSE, although not significantly different from Lasso and Forward Selection approaches.
+
+As we increase the number of true covariates and make the task of model building via variable selection more challenging, we observe that all data-driven methods produce estimators that converge to the same value of MSE, while the 'Experience-Based' approach tends to perform worse as the number of true covariates grows. While this finding was not expected, a possible explanation could be considered in the context of the bias-variance trade-off, which is discussed in detail in the subsequent discussion section.
+--> 
+
+
+In a scenario with a relatively low number of true confounders, adaptive lasso variable selection produces an Inverse Probability Weighting (IPW) estimator with Mean Squared Error (MSE) almost identical to the best-case scenario. We estimate that the average change in MSE for IPW based on adaptive lasso variable selection, compared with IPW based on all true covariates, was PLACEHOLDER () when the number of true covariates was 10, after adjusting for other predictors. For detailed estimates for all variable selection methods under different values of true covariate space size, please refer to the appendix.
+
+Overall, @fig-var-sel-effect shows that in situations with a low number of true predictors, Oracle-based and Outcome Adaptive Lasso produce IPW estimators with similar MSE, which is also the lowest possible under our data-generating specifications. Lasso regression and Forward Variable Selection methods yield IPW estimators with higher MSE, as evidenced by mostly non-overlapping confidence intervals. In a situation with a low number of true covariates, the 'Experience-Based' method of variable selection results in the highest amount of MSE, although not significantly different from Lasso and Forward Selection approaches.
+
+As we increase the number of true covariates and make the task of model building via variable selection more challenging, we observe that all data-driven methods produce estimators that converge to the same value of MSE, while the 'Experience-Based' approach tends to perform worse as the number of true covariates grows. While this finding was not expected, a possible explanation could be considered in the context of the bias-variance trade-off, which is discussed in detail in the subsequent discussion section.
+
+```{r plot - valdiate model for inference - not evaluated for paper output, eval = F }
+#| eval: false 
+#| 
+
+res = data.frame(resid = rstudent(model_1), 
+                         predicted = model_1$fitted.values)
+
+n_out = res %>% filter(abs(resid) > 2) %>% nrow()
+p_out = n_out/nrow(res)
+
+## residuals seem okay 
+ggplot(data = res, 
+       aes(x = predicted, y = resid)) + 
+  geom_point() + 
+  geom_smooth() + 
+  theme_minimal() + 
+  geom_hline(yintercept = 0, color = "red", linetype = "dashed") + 
+  geom_hline(yintercept = -2, color = "darkgrey", linetype = "dashed") + 
+  geom_hline(yintercept = 2, color = "darkgrey", linetype = "dashed") + 
+  ggtitle(paste0("% Residuals outside of -2/2 range: ", 
+                 round(p_out, 4) * 100, "%"
+                 ))
+
+## vif for interactions is too big, need to do something about it 
+## a few more inflated factors on a reduced model but okay overall 
+vif(model_1) %>% round(., 2)
+
+
+```
+
+```{r plot - plot of main marginal effects of covariate speace by var selection results 2x1 grid of plots, eval = F }
+#| eval: false 
+#| fig-height: 6
+#| fig-width: 10 
+#| label: fig-margin-effect-s-int
+#| fig-cap: "Marginal effects of confoudner selection of MSE at different levels of True Model Complexity" 
+
+plots = "Covs by S"
+
+if(plots == "S by Covs"){
+  
+  plot_model(model = model_1, 
+             type = "eff", 
+             terms = c("s", "p_true_selected[0.25, 0.5, 0.75]")) + 
+    theme_minimal() + 
+    theme(legend.position = "bottom") + 
+    labs(x = "True Covariate Space Size", 
+         y = "IPW Mean Squared Error", 
+         color = "# True Covariates Selected") + 
+    scale_y_continuous(labels = function(x){exp(x) %>% round(., 2)}) + 
+    ggtitle("") -> p.left 
+  
+  plot_model(model = model_1, 
+             type = "eff", 
+             terms = c("s", "p_false_selected[0.25, 1, 2]")) + 
+    theme_minimal() + 
+    theme(legend.position = "bottom") + 
+    labs(x = "True Covariate Space Size", 
+         y = "IPW Mean Squared Error", 
+         color = "# False Covariates Selected") + 
+    scale_y_continuous(labels = function(x){exp(x) %>% round(., 2)}) + 
+    ggtitle("") -> p.right
+  
+  
+  p.left + p.right + plot_layout(nrow = 1, guides = "collect") & theme(legend.position = "bottom") & 
+    plot_annotation(title = 'Effect of Covariate Selection Process on MSE',
+                    #caption = 'made with patchwork',
+                    theme = theme(plot.title = element_text(size = 16)))
+
+}
+
+if(plots == "Covs by S"){
+  
+  plot_model(model = model_1, 
+             type = "eff", 
+             terms = c("p_true_selected", "s [10, 20, 30]")) + 
+    theme_minimal() + 
+    theme(legend.position = "bottom") + 
+    labs(x = "True Covariate Selected", 
+         y = "IPW Mean Squared Error", 
+         color = "# Covariates") + 
+    scale_y_continuous(labels = function(x){exp(x) %>% round(., 2)}) + 
+    scale_x_continuous(breaks = c(0,0.5,1), 
+                       labels = function(x){paste0(round(x,2)*100, "%")}) + 
+    ggtitle("") -> p.left 
+  
+  plot_model(model = model_1, 
+             type = "eff", 
+             terms = c("p_total_selected[0, 1, 2]", "s[10, 20, 30]")) + 
+    theme_minimal() + 
+    theme(legend.position = "bottom") + 
+    labs(x = "False Covariate Selected", 
+         y = "IPW Mean Squared Error", 
+         color = "# Covariates") + 
+    scale_y_continuous(labels = function(x){exp(x) %>% round(., 2)})  + 
+    scale_x_continuous(breaks = c(0,1,2), 
+                       labels = function(x){paste0(round(x,2)*100, "%")}) + 
+    ggtitle("") -> p.right
+  
+  
+  p.left + p.right + plot_layout(nrow = 1, guides = "collect") & theme(legend.position = "bottom") & 
+    plot_annotation(title = 'Effect of Covariate Selection Process on MSE',
+                    #caption = 'made with patchwork',
+                    theme = theme(plot.title = element_text(size = 16)))
+
+}
+
+```
+
+```{r plot -  plot of main effect of variable selction method in covariate space 1 main plot}
+#| label: fig-var-sel-effect
+#| fig-cap: "Marginal effect of variable selection method on MSE" 
+#| fig-width: 10
+#| fig-height: 6
+
+plot_model(model = model_1, 
+           type = "eff", 
+           terms = c("method", "s")
+           ) + 
+  theme_minimal() + 
+  theme(legend.position = "bottom") + 
+  labs(x = "True Covariate Space Size", 
+       y = "IPW Mean Squared Error", 
+       color = "Variable Selection Method") + 
+  scale_y_continuous(labels = function(x){exp(x) %>% round(., 2)}) + 
+  ggtitle("")  + 
+  geom_line() 
+
+```
+<!-- 
+Lastly, we evalaute the effect of proportion of correctly identified confounders and false positive covariates on MSE for each 
+method. Due to some statsitically signficant interactions, we present the results for each considered size of the true covariate space. @fig-effects-by-S incorporates some of the information presented in @fig-var-sel-effect. When the number of true confounders to capture is low, all methods produce estiamtors with similar MSE. Additionally, as we capture more true covariates, we 
+decrease MSE, altought by a small, not statistically signfiicant, amount. However, as the size of true confoudner space grows, 
+additional percentage of covariates captured in the resuts in higher MSE. We specualte that with complex data generating mechanisms we have a nessecity of specifying complex models, which inevitably leads to more bias, which incrases MSE. We address these results in the discussions section. @fig-var-sel-effect also presents wide confidence bands for estiamted effect lines when the true number of confoudners is 30. After looking at the summary of the data we found that there are not many cases when the true number of 
+predictors was below 50%. @fig-true-cov-ratio-summary presented in the previous section shows that the number of true covariates captured was 75% to 85% on average. Estiamtign effects and interpreting effects for the scenarios with sparsly presented data 
+leands to results that are inherently highly uncertain. We also evaluate the impact of proportion of all selected covariates to the number of true confounders. Resutls are shows in @fig-effects-by-S-2 in appendix. 
+--> 
+
+The last phase of our analysis assesses the influence of the proportion of correctly identified confounders and false-positive covariates on Mean Squared Error (MSE) for each employed method. The consideration of statistically significant interactions prompts a detailed presentation of results for varying sizes of the true covariate space. @fig-effects-by-S incorporates key insights from @fig-var-sel-effect. In scenarios where the number of true confounders to capture is low, all methods yield estimators with comparable MSE. Furthermore, with an increase in the capture of true covariates, a marginal reduction in MSE is observed, though not statistically significant. However, as the size of the true confounder space expands, capturing an additional percentage of covariates results in higher MSE. We posit that the complexity of data generating mechanisms necessitates the specification of intricate models, inevitably introducing bias, which contributes to increased MSE. Detailed discussions on these findings are provided in the subsequent section.
+
+```{r best variable selection model for large space as p true cov increases }
+#| fig-width: 10
+#| fig-height: 6
+#| label: fig-effects-by-S
+#| fig-cap: "Effects of variable selection models are given for scenarios with 10, 20, and 30 true confounders" 
+plot_model(model = model_1, 
+           type = "eff", 
+           terms = c("p_true_selected", "method", "s[10, 20, 30]" ), 
+           prefix.labels = "label") + 
+  theme_minimal() + 
+  theme(legend.position = "bottom") + 
+  scale_y_continuous(labels = function(x){exp(x) %>% round(., 2)}) + 
+  scale_x_continuous(breaks = c(0,0.5,1), 
+                     labels = function(x){paste0(round(x,2)*100, "%")}) + 
+  labs(y = "MSE IPW Estiamtor", 
+       x = "% True Covariates Selected", 
+       title = "Variable selection method effect on MSE under varying model complexity conditions", 
+       color = "Variable Selection Method")
+
+# p_false_selected[0, 1, 2]
+
+```
+
+
+@fig-var-sel-effect also includes broad confidence bands for estimated effect lines, particularly noteworthy when the true number of confounders is 30. An examination of the data summary reveals few instances where the true number of predictors was below 50%. The preceding @fig-true-cov-ratio-summary indicates that, on average, 75% to 85% of true covariates were captured. Estimating and interpreting effects in scenarios with sparse data presentation lead to inherently uncertain results. Please note that some estiamted effects might not have actual reflection in the data. Oravle variable selction method always identifies 100% of corerct covariates. We use our regression model to estiamte expected MSE for the Oracle variable selection method at values lesser than 100% to enable comparison of this benchmark method with other variable seelction methods. 
+
+Furthermore, we explore the impact of the proportion of all selected covariates on the number of true confounders. Detailed results are presented in @fig-effects-by-S-2 in the appendix.
+
+# Discussion 
+
+**Will change this section the most** 
+
+# Conclusion 
+
+\newpage 
+
+<!-- this is a weird thing we need to do to make citations show up before appendix. 
+otherwise, i learned, bib file citations will show up in the last section of your paper defined by any 
+number of 'pound marks' like # or ## or even #### 
+--> 
+
+# References
+
+<div id="refs"></div>
+
+\newpage 
+
+# Appendix
+
+
+# Tables
+
+
+```{r}
+results_table_prep <- results %>%
+  filter(
+    method != "experience based",
+    method != "PCA (80% of variance)"
+    ) %>%
+  mutate(
+    MSE.pss = (1/n)*(ATE.true - ATE.pss)^2,   # calculate MSE for each row
+    MSE.ipw2 = (1/n)*(ATE.true - ATE.ipw2)^2  # (1/n)*(ATE.true - ATE.pss)^2
+    
+    ) %>%  
+  group_by(method) %>%
+  summarize(  # average value by method
+    Bias.pss = (mean(bias.pss)),
+    MSE.pss.avg = mean(MSE.pss),  # yielded same value as summing squared 
+    SE.pss.avg = mean(SE.pss),    # diffs and multiplying by 1/n (or 1/3600)
+    lwr.pss.avg = mean(lwr.pss),
+    upr.pss.avg = mean(upr.pss),
+    Bias.ipw2 = (mean(bias.ipw)),
+    MSE.ipw2.avg = mean(MSE.ipw2),
+    SE.ipw2.avg = mean(SE.ipw2),
+    lwr.ipw2.avg = mean(lwr.ipw2),
+    upr.ipw2.avg = mean(upr.ipw2),
+  )
+
+tbl_MSE_sum <- gt(
+  results_table_prep
+  ) %>%
+  tab_header(
+    title = md("Mean Squared Error of Adjusted Treatment Effect for <br> select Propensity Score Variable Selection Methods")
+  ) %>%
+  tab_spanner(
+    label = "Propensity Score Stratification",
+    columns = c("Bias.pss":"upr.pss.avg")
+  ) %>%
+  tab_spanner(
+    label = "Inverse Probability Weighting",
+    columns = c("Bias.ipw2":"upr.ipw2.avg")) %>%
+  cols_merge(
+    columns = c(lwr.pss.avg, upr.pss.avg),
+    pattern = "{1}, {2}"
+  ) |>
+  cols_merge(
+    columns = c(lwr.ipw2.avg, upr.ipw2.avg),
+    pattern = "{1}, {2}"
+  ) %>%
+  cols_label(
+    method = "Method",
+    Bias.pss = "Bias",
+    MSE.pss.avg = "MSE",
+    SE.pss.avg = "SE",
+    lwr.pss.avg = "95% CI",
+    Bias.ipw2 = "Bias",
+    MSE.ipw2.avg = "MSE",
+    SE.ipw2.avg = "SE",
+    lwr.ipw2.avg = "95% CI"
+  ) %>%
+  tab_footnote(
+    footnote = "Average value of 500 simulated combinations of each combination of sample size (1500, 3000, 4500, 6000), potential covariates (50, 100, 150), and true covariates (10, 20, 30)",
+    locations = cells_column_spanners(
+      c("Propensity Score Stratification",
+      "Inverse Probability Weighting")
+    )
+ ) %>%
+  cols_align(
+    align = c("center"),
+    columns = c(everything())
+  ) %>%
+  cols_align(
+    align = c("left"),
+    columns = c(method)
+  ) %>%
+  tab_style(
+    style = cell_text(weight = "bold"),
+    locations = cells_column_labels(columns=c(everything()))
+  ) %>%
+  fmt_number(
+    columns = c("SE.pss.avg":"upr.pss.avg",
+                "SE.ipw2.avg":"upr.ipw2.avg"),
+    decimals = 3
+  ) %>%
+  fmt_number(
+    columns = c("Bias.pss", "Bias.ipw2"),
+    decimals = 4
+  ) %>%
+  sub_missing(
+  columns = everything(),
+  rows = everything(),
+  missing_text = "--"
+)
+
+tbl_MSE_sum
+
+```
+
+```{r}
+tbl_MSE_each_n_prep2 <- results %>%
+  filter(
+    method != "experience based",
+    method != "PCA (80% of variance)"
+    ) %>%
+  mutate(
+    MSE.pss = (1/n)*(ATE.true - ATE.pss)^2,   # calculate MSE for each row
+    MSE.ipw2 = (1/n)*(ATE.true - ATE.ipw2)^2  # (1/n)*(ATE.true - ATE.pss)^2
+    ) %>%  
+  group_by(method, n) %>%
+  summarize(  # average value by method
+    Bias.pss = (mean(bias.pss)),
+    MSE.pss.avg = mean(MSE.pss),  # yielded same value as summing squared 
+    SE.pss.avg = mean(SE.pss),    # diffs and multiplying by 1/n (or 1/3600)
+    lwr.pss.avg = mean(lwr.pss),
+    upr.pss.avg = mean(upr.pss),
+    Bias.ipw = (mean(bias.ipw)),
+    MSE.ipw2.avg = mean(MSE.ipw2),
+    SE.ipw2.avg = mean(SE.ipw2),
+    lwr.ipw2.avg = mean(lwr.ipw2),
+    upr.ipw2.avg = mean(upr.ipw2),
+  )
+
+tbl_MSE_each_n <- gt(
+  tbl_MSE_each_n_prep2,
+  groupname_col = "method"
+  ) %>%
+  tab_header(
+    title = md("Mean Squared Error of Adjusted Treatment Effect for <br> select Propensity Score Variable Selection Methods")
+  ) %>%
+  tab_spanner(
+    label = "Propensity Score Stratification",
+    columns = c("Bias.pss":"upr.pss.avg")
+  ) %>%
+  tab_spanner(
+    label = "Inverse Probability Weighting",
+    columns = c("Bias.ipw":"upr.ipw2.avg")) %>%
+  cols_merge(
+    columns = c(lwr.pss.avg, upr.pss.avg),
+    pattern = "{1}, {2}"
+  ) |>
+  cols_merge(
+    columns = c(lwr.ipw2.avg, upr.ipw2.avg),
+    pattern = "{1}, {2}"
+  ) %>%
+  cols_label(
+    method = "Method",
+    Bias.pss = "Bias",
+    MSE.pss.avg = "MSE",
+    SE.pss.avg = "SE",
+    lwr.pss.avg = "95% CI",
+    Bias.ipw = "Bias",
+    MSE.ipw2.avg = "MSE",
+    SE.ipw2.avg = "SE",
+    lwr.ipw2.avg = "95% CI"
+  ) %>%
+  tab_footnote(
+    footnote = "Average value for combination of 500 of each combination of potential covariates (50, 100, 150) and true covariates (10, 20, 30)",
+    locations = cells_column_spanners(
+      c("Propensity Score Stratification",
+      "Inverse Probability Weighting")
+    )
+ ) %>%
+  cols_align(
+    align = c("center"),
+    columns = c(everything())
+  ) %>%
+  cols_align(
+    align = c("left"),
+    columns = c(method)
+  ) %>%
+  tab_style(
+    style = cell_text(weight = "bold"),
+    locations = cells_column_labels(columns=c(everything()))
+  ) %>%
+  fmt_number(
+    columns = c("SE.pss.avg":"upr.pss.avg",
+                "SE.ipw2.avg":"upr.ipw2.avg"),
+    decimals = 3
+  ) %>%
+  fmt_number(
+    columns = c("Bias.pss", "Bias.ipw"),
+    decimals = 4
+  ) %>%
+  sub_missing(
+  columns = everything(),
+  rows = everything(),
+  missing_text = "--"
+)
+
+tbl_MSE_each_n
+```
+
+
+
+<!-- Applied Analyses 
+Get examples of covatiate dimensionality space and provide as examples 
+--> 
+
+https://www.ncbi.nlm.nih.gov/pmc/articles/PMC8227634/#:~:text=In%20the%20Obstetrics%20and%20Periodontal,of%20preterm%20labor%20%5B73%5D.
+
+https://accpjournals.onlinelibrary.wiley.com/doi/abs/10.1592/phco.23.8.1037.32876?casa_token=-v6XJv5w0DkAAAAA:DJdg3MRA_a9xY093j773zpMOCKSlLYQ2jeJSjeCjR8hc7_J-WIoEeOiwNEuCvI-oUhyVgf-9bc6aNA
+
+https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3065283/
+
+Use of random forest with a lot of variables 
+https://www.ncbi.nlm.nih.gov/pmc/articles/PMC5920646/
+
+<!-- Variable Selection Studies --> 
+
+* Super high dim variable selection and ANDI data 
+
+https://onlinelibrary.wiley.com/doi/full/10.1111/biom.13625?casa_token=TPy_un3cN-EAAAAA%3Asm_EoAthJYwoV489HGuY_CnDi0BV7JIWSOvWyTcynDH6dYDq0TOQJGe6pHMzhcFI4z42wdEjvA6L8w
+
+* Some study with bias and mse 
+
+https://onlinelibrary.wiley.com/doi/full/10.1002/sim.4469?casa_token=N3XCrX6yrUsAAAAA%3AQ2uBYcmFy4fL5BlDF8FhHSi5VRVqXAfxKxiVoQ8sxic-ikpXzZnL8_FPmqQhPGPP1No3OxG74JK0fw
+
+
+```{r   best variable selection model for large space as p false positive cov increases}
+#| fig-width: 10
+#| fig-height: 6
+#| label: fig-effects-by-S-2
+#| fig-cap: "Effects of variable selection models are given for scenarios with 10, 20, and 30 true confounders" 
+plot_model(model = model_1, 
+           type = "eff", 
+           terms = c("p_total_selected[0, 1, 2]", "method", "s[10, 20, 30]" )) + 
+  theme_minimal() + 
+  theme(legend.position = "bottom") + 
+  scale_y_continuous(labels = function(x){exp(x) %>% round(., 2)}) + 
+  scale_x_continuous(breaks = c(0,1,2), 
+                     labels = function(x){paste0(round(x,2)*100, "%")}) + 
+  labs(y = "MSE IPW Estiamtor", 
+       x = "% True Covariates Selected", 
+       title = "Variable selection method effect on MSE under varying model complexity conditions", 
+       color = "Variable Selection Method")
+
+# 
+
+```
