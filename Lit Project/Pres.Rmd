@@ -1,0 +1,64 @@
+---
+title: "Variable Selection in Causal Inference Using Penalization"
+subtitle: "Brief Paper Summary"
+author: "Denis Ostroushko"
+date: \today
+output:
+  beamer_presentation:
+    theme: "metropolis"
+---
+
+<!--
+
+
+    colortheme: "owl"
+    
+    --> 
+
+# Motivation 
+
+- Variable selection for causal inference in using common variable selection methods can lead to serious model misspecification issues
+
+- Inclusion of spurious predictors can lead to inflated variance of the estimator 
+
+- Omission of important confounders may lead to a biased estimation of ATE 
+
+- Doubly robust estimators employ propensity score and outcome models to provide more credible estimates of ATE 
+
+- Under the conditions that both types are correctly specified, variance of such estimator is also minimized 
+
+
+# Overview  
+
+- The three types of predictor are: 
+  
+  * Related to the outcome only 
+
+  * Related to the treatment assignment only 
+
+  * A confounder: related to both! 
+  
+- Proposed method selects those which are true confounders, and allows to select weak outcome related, but strong treatment related predictors
+
+- We shrink or remove the parameter based on how much the predictor contributes to the outcome model 
+
+# Estimation
+
+1. Consider all types of variables as predictors, construct outcome and treatment models 
+
+2. Apply penalization to coefficients in the treatment model. Penalty for each coefficient depends on the levels of contribution to both the outcome and treatment models. Obtain selected variables and propensity scores. 
+
+3. Define $S_i = A_i - \pi(\textbf{X}_i)$
+
+4. Doubly robust estimator: $E[Y_i | S_i, \textbf{X}_i] = \theta * S_i + g(\textbf{X}_i, \beta)$
+  * this one is similar to propensity score regression 
+  
+  * $\theta$ is the average treatment effect 
+  
+# Results 
+
+![](tab.png)
+
+* ATE compared to IPW and Outcome Regression with varying number of weak confounders 
+
+* SCAD and LASSO used for considered method

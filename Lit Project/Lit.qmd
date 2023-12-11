@@ -1,0 +1,32 @@
+---
+title: "Variable Selection in Causal Inference Using Penalization: Paper Summary"
+format: pdf
+execute: 
+  echo: false 
+  warning: false 
+  message: false 
+header-includes: \usepackage{float}
+---
+
+<!-- 
+
+
+
+In this summary I present a summary of a method aiming to perform variable seleciton for a doubly robust average treatment effect estiamtor. The focus is on simple additive linear propensity score and outcome mdoels, and on non-mediated treatment effect. These results may not generalize for alternative scenarios. 
+
+The estimator is doubly robust because it remains consistent if either the propensity score model or the outcome regression model is correctly specified. It generally has the smallest variance when both models are correctly specified, but even when one of them is misspecified, it still outperforms estimators that rely solely on either propensity score weighting or outcome regression. For applied setting and real-world data generating mechanisms, authors define three sets of possible predicotr variables: those prediciting just the outcome, those predicting just the treatment assign,ment, and confounders, i.e. varaibles that are related to both the treamtnent and the outcome variables. 
+
+Authors state that assymptotically variable seelction methods work great, but for the small to moderate sample size, the chance of missing importannt and barely important confoudners a larger chance to be missed. To deal with this, authors propose to penalize a reparametrized joint likelihood of the outcome and treatment models to select important confounders. This gives weak confounders that barely predict outcome or treatment a better chance of being selected compared to methods that penalize only the outcome or treatment model. They call such confoudners non-ignorable. Maximum penalized likelyhood estimator (MLP) used for such variable selection is said to have more bias but less variance than unpenalzied analogues. The goal of this method is to construct the most parsimonous model. 
+
+Common variable selection models like backward elimination, permutation methods, and bayesian alternatives ignore important covariates that are weakly associated with the treatment or outcome. Such exlusions of the 'minor' effects may compound and lead to the higher degree of the model misspecification. In contrast, using propoesd method a covariate has two chances to appear in the final model. The procedure focuses on the penalty for coefficeints in the selection of confoudners, but does not penalize those predictors of the outcome that do not appear to be correlated with the treatment. For example, if a given predictor weakly predicts the outcome and the treatment, porposed method stronly penalizes such variable, and its coreresponding parameter, as opposed to a scenario where a variable barely predicts the outcome, and strognly predicts the treatment assignment. In summary, we first estimate propensity score parameters using shrinakge. Then we create a random varaible (Observed Treatment - Propensity Score), and then we fit a regression model for the outocme that depends on the defined random variable and selected confoudners for propensity score mdoel. 
+
+To produce doubly robust estiamtors, authors used LASSO and Smoothly Clipped Absolute Deviation penalty (SCAD). They compared and contrasted the method with just IPW and just Regression model, as well as the Oracle model with all true predictors. Simulation results for situations with sample size of 300 and 500, and Number of predictors exceeding N show that doubly robust estimators based on LASSO and SCAD penalties achieve MSE and Variance simialr to Oracle, while incurring some bias, although not greatly diffrent from the Oracle method. Applied data analysis of economic data revealed similar results.  
+
+--> 
+This summary introduces a method designed for variable selection in a doubly robust average treatment effect estimator, focusing on simple additive linear propensity score and outcome models, particularly in the context of non-mediated treatment effects. Paper can be found [here](https://arxiv.org/abs/1311.1283). The doubly robust nature of the estimator ensures consistency even if either the propensity score or outcome regression model is misspecified. The authors propose a strategy for variable selection, emphasizing the penalization of a reparametrized joint likelihood of outcome and treatment models to address the challenge of missing important confounders, especially in small to moderate sample sizes.
+
+The method introduces the concept of non-ignorable confounders, weak predictors of outcome or treatment with a better chance of being selected. The Maximum Penalized Likelihood Estimator (MLP) is employed for variable selection, prioritizing a trade-off between bias and variance to construct a parsimonious model. Traditional variable selection models, such as backward elimination and permutation methods, may overlook weakly associated covariates, leading to increased model misspecification. As an illustrative example, the authors discuss scenarios where a predictor weakly predicts both the outcome and the treatment, highlighting that the proposed method effectively penalizes such variables and their corresponding parameters, in contrast to a scenario where a variable barely predicts the outcome but strongly predicts the treatment assignment.
+
+The methodology involves estimating propensity score parameters using shrinkage, creating a random variable (Observed Treatment - Propensity Score), and fitting a regression model for the outcome based on the defined random variable and selected confounders for the propensity score model.
+
+For the production of doubly robust estimators, the authors employ LASSO and Smoothly Clipped Absolute Deviation penalty (SCAD), comparing their method with Inverse Probability Weighting (IPW) and Regression model separately, as well as an Oracle model with all true predictors. Simulation results for sample sizes of 300 and 500, with predictors exceeding N, indicate that doubly robust estimators using LASSO and SCAD achieve Mean Squared Error (MSE) and variance similar to the Oracle, with some bias but not significantly different from the Oracle method. Applied data analysis of economic data reinforces these findings.
