@@ -17,7 +17,7 @@ output:
 
 # Motivation 
 
-- Variable selection for causal inference in using common variable selection methods can lead to serious model misspecification issues
+- In small and moderate sample sizes common variable selection methods will lead to common issues
 
 - Inclusion of spurious predictors can lead to inflated variance of the estimator 
 
@@ -30,27 +30,31 @@ output:
 
 # Overview  
 
-- The three types of predictor are: 
-  
-  * Related to the outcome only 
+- What if I told you there is a good method that addresses two common issues! 
 
-  * Related to the treatment assignment only 
+- Proposed method aims to find non-ignorable confounders and predictors of outcome
 
-  * A confounder: related to both! 
-  
-- Proposed method selects those which are true confounders, and allows to select weak outcome related, but strong treatment related predictors
-
-- We shrink or remove the parameter based on how much the predictor contributes to the outcome model 
+- Intuitively, we shrink or remove the parameters based on how much the predictor contributes to the outcome model 
 
 # Estimation
 
-1. Consider all types of variables as predictors, construct outcome and treatment models 
+1. Consider all types of variables as predictors, construct outcome and treatment models with the same set of predictors. Variable selection is done using penalized joint maximum likelihood
 
-2. Apply penalization to coefficients in the treatment model. Penalty for each coefficient depends on the levels of contribution to both the outcome and treatment models. Obtain selected variables and propensity scores. 
+2. Penalty for each coefficient depends on the levels of contribution to both the outcome and treatment models. Authors call this a booster parameter
 
-3. Define $S_i = A_i - \pi(\textbf{X}_i)$
+    * For example, when a covariate that barely predicts the outcome and treatment it has a stronger penalty on the associated parameter. 
+    
+    * When a covariate barely predicts the outcome and is strongly related to treatment, penalty is less strict. 
+    
+    * Idea is similar to adaptive lasso 
+    
+# Estimation Continued 
 
-4. Doubly robust estimator: $E[Y_i | S_i, \textbf{X}_i] = \theta * S_i + g(\textbf{X}_i, \beta)$
+3. Select final predictors with effects above a certain threshold: $\large \frac{1}{\sqrt{n}}$
+
+4. Define $S_i = A_i - \pi(\textbf{X}_i)$, $\pi(\textbf{X}_i)$ comes from a refitted penalized regression 
+
+5. Doubly robust estimator: $E[Y_i | S_i, \textbf{X}_i] = \theta * S_i + g(\textbf{X}_i, \beta)$
   * this one is similar to propensity score regression 
   
   * $\theta$ is the average treatment effect 
@@ -62,3 +66,9 @@ output:
 * ATE compared to IPW and Outcome Regression with varying number of weak confounders 
 
 * SCAD and LASSO used for considered method
+
+# Questions 
+
+\begin{align*}
+\textbf{NO \ QUESTIONS}
+\end{align*}

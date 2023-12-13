@@ -1,4 +1,4 @@
-This is pdfTeX, Version 3.141592653-2.6-1.40.24 (TeX Live 2022) (preloaded format=pdflatex 2022.7.5)  11 DEC 2023 08:06
+This is pdfTeX, Version 3.141592653-2.6-1.40.24 (TeX Live 2022) (preloaded format=pdflatex 2022.7.5)  12 DEC 2023 20:33
 entering extended mode
  restricted \write18 enabled.
  %&-line parsing enabled.
@@ -1055,9 +1055,11 @@ File: ts1lmss.fd 2015/05/01 v1.6.1 Font defs for Latin Modern
 
 ] [4
 
+] [5
+
 ]
 LaTeX Font Info:    Trying to load font information for OT1+lmss on input line 
-189.
+201.
 (/usr/local/texlive/2022/texmf-dist/tex/latex/lm/ot1lmss.fd
 File: ot1lmss.fd 2015/05/01 v1.6.1 Font defs for Latin Modern
 )
@@ -1065,35 +1067,35 @@ Package microtype Info: Loading generic protrusion settings for font family
 (microtype)             `lmss' (encoding: OT1).
 (microtype)             For optimal results, create family-specific settings.
 (microtype)             See the microtype manual for details.
-LaTeX Font Info:    Trying to load font information for OML+lmm on input line 1
-89.
+LaTeX Font Info:    Trying to load font information for OML+lmm on input line 2
+01.
 (/usr/local/texlive/2022/texmf-dist/tex/latex/lm/omllmm.fd
 File: omllmm.fd 2015/05/01 v1.6.1 Font defs for Latin Modern
 )
 LaTeX Font Info:    Trying to load font information for OMS+lmsy on input line 
-189.
+201.
 (/usr/local/texlive/2022/texmf-dist/tex/latex/lm/omslmsy.fd
 File: omslmsy.fd 2015/05/01 v1.6.1 Font defs for Latin Modern
 )
 LaTeX Font Info:    Trying to load font information for OMX+lmex on input line 
-189.
+201.
 (/usr/local/texlive/2022/texmf-dist/tex/latex/lm/omxlmex.fd
 File: omxlmex.fd 2015/05/01 v1.6.1 Font defs for Latin Modern
 )
 LaTeX Font Info:    External font `lmex10' loaded for size
-(Font)              <10.95> on input line 189.
+(Font)              <10.95> on input line 201.
 LaTeX Font Info:    External font `lmex10' loaded for size
-(Font)              <8> on input line 189.
+(Font)              <8> on input line 201.
 LaTeX Font Info:    External font `lmex10' loaded for size
-(Font)              <6> on input line 189.
-LaTeX Font Info:    Trying to load font information for U+msa on input line 189
+(Font)              <6> on input line 201.
+LaTeX Font Info:    Trying to load font information for U+msa on input line 201
 .
 (/usr/local/texlive/2022/texmf-dist/tex/latex/amsfonts/umsa.fd
 File: umsa.fd 2013/01/14 v3.01 AMS symbols A
 ) (/usr/local/texlive/2022/texmf-dist/tex/latex/microtype/mt-msa.cfg
 File: mt-msa.cfg 2006/02/04 v1.1 microtype config. file: AMS symbols (a) (RS)
 )
-LaTeX Font Info:    Trying to load font information for U+msb on input line 189
+LaTeX Font Info:    Trying to load font information for U+msb on input line 201
 .
 (/usr/local/texlive/2022/texmf-dist/tex/latex/amsfonts/umsb.fd
 File: umsb.fd 2013/01/14 v3.01 AMS symbols B
@@ -1101,22 +1103,27 @@ File: umsb.fd 2013/01/14 v3.01 AMS symbols B
 File: mt-msb.cfg 2005/06/01 v1.0 microtype config. file: AMS symbols (b) (RS)
 )
 LaTeX Font Info:    Font shape `T1/lmss/m/it' in size <10.95> not available
-(Font)              Font shape `T1/lmss/m/sl' tried instead on input line 189.
+(Font)              Font shape `T1/lmss/m/sl' tried instead on input line 201.
 LaTeX Font Info:    Font shape `T1/lmss/m/it' in size <8> not available
-(Font)              Font shape `T1/lmss/m/sl' tried instead on input line 189.
+(Font)              Font shape `T1/lmss/m/sl' tried instead on input line 201.
 LaTeX Font Info:    Font shape `T1/lmss/m/it' in size <6> not available
-(Font)              Font shape `T1/lmss/m/sl' tried instead on input line 189.
-[5
+(Font)              Font shape `T1/lmss/m/sl' tried instead on input line 201.
 
-]
-<tab.png, id=52, 505.89pt x 226.8475pt>
-File: tab.png Graphic file (type png)
-<use tab.png>
-Package pdftex.def Info: tab.png  used on input line 202.
-(pdftex.def)             Requested size: 307.29561pt x 137.79524pt.
+LaTeX Font Warning: Command \large invalid in math mode on input line 201.
+
 [6
 
- <./tab.png>]
+]
+<tab.png, id=59, 505.89pt x 226.8475pt>
+File: tab.png Graphic file (type png)
+<use tab.png>
+Package pdftex.def Info: tab.png  used on input line 214.
+(pdftex.def)             Requested size: 307.29561pt x 137.79524pt.
+[7
+
+ <./tab.png>] [8
+
+]
 \tf@nav=\write5
 \openout5 = `Pres.nav'.
 
@@ -1128,11 +1135,11 @@ Package pdftex.def Info: tab.png  used on input line 202.
 
 (./Pres.aux) ) 
 Here is how much of TeX's memory you used:
- 27758 strings out of 478268
- 561923 string characters out of 5846348
- 826996 words of memory out of 5000000
- 45280 multiletter control sequences out of 15000+600000
- 529120 words of font info for 107 fonts, out of 8000000 for 9000
+ 27775 strings out of 478268
+ 562197 string characters out of 5846348
+ 826997 words of memory out of 5000000
+ 45289 multiletter control sequences out of 15000+600000
+ 529221 words of font info for 108 fonts, out of 8000000 for 9000
  1141 hyphenation exceptions out of 8191
  128i,13n,122p,1805b,582s stack positions out of 10000i,1000n,20000p,200000b,200000s
 {/usr/local/texlive/2022/texmf-dist/fonts/enc/dvips/lm/lm-mathit.
@@ -1146,11 +1153,12 @@ b></usr/local/texlive/2022/texmf-dist/fonts/type1/public/lm/lmss8.pfb></usr/loc
 al/texlive/2022/texmf-dist/fonts/type1/public/lm/lmssbx10.pfb></usr/local/texli
 ve/2022/texmf-dist/fonts/type1/public/lm/lmsso10.pfb></usr/local/texlive/2022/t
 exmf-dist/fonts/type1/public/lm/lmsso8.pfb></usr/local/texlive/2022/texmf-dist/
-fonts/type1/public/lm/lmsy10.pfb>
-Output written on Pres.pdf (6 pages, 216256 bytes).
+fonts/type1/public/lm/lmsy10.pfb></usr/local/texlive/2022/texmf-dist/fonts/type
+1/public/lm/lmsy8.pfb>
+Output written on Pres.pdf (8 pages, 223213 bytes).
 PDF statistics:
- 109 PDF objects out of 1000 (max. 8388607)
- 74 compressed objects within 1 object stream
- 17 named destinations out of 1000 (max. 500000)
+ 129 PDF objects out of 1000 (max. 8388607)
+ 90 compressed objects within 1 object stream
+ 23 named destinations out of 1000 (max. 500000)
  41008 words of extra memory for PDF output out of 42996 (max. 10000000)
 
