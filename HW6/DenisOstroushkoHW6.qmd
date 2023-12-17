@@ -1,0 +1,376 @@
+---
+title: "Denis Ostroushko - HW6"
+format: 
+  pdf:
+    toc: false
+execute: 
+  echo: true
+  warning: false
+  message: false
+---
+
+
+```{r read packages }
+#| echo: false 
+#| results: hide
+#| output: false
+#| 
+library(tidyverse)
+library(gfoRmula)
+library(ipw)
+library(data.table)
+library(broom)
+```
+
+# Question 1 
+
+```{r}
+#| echo: false 
+hiv_data <- read_csv("datazHIV_example.csv")[,-1]
+hiv_data$id <- as.numeric(rownames(hiv_data))
+
+pivot_l <- function(df, names, val_name){
+  df %>% 
+    select(all_of(c("id", names))) %>% 
+    pivot_longer(cols = -id, 
+                 names_to =  "names", 
+                 values_to = val_name) %>% 
+    arrange(id, names) %>% 
+    group_by(id) %>% 
+    mutate(time = (1:n()) - 1) %>% 
+    ungroup() %>% 
+    select(-names)
+}
+
+all_long_parts <- list(
+  
+  pivot_l(df = hiv_data, 
+          names = c("CD40", "CD41", "CD42", "CD43", "CD44"), 
+          val_name = "CD"), 
+  pivot_l(df = hiv_data, 
+          names = c("A0", "A1", "A2", "A3"), 
+          val_name = "A"), 
+  
+  pivot_l(df = hiv_data, 
+          names = c("R0", "R1", "R2", "R3", "R4"), 
+          val_name = "R")
+)
+
+hiv_data_long <- all_long_parts %>% reduce( left_join, by = c("id","time")) %>% 
+  select(id, time, everything()) %>% 
+  group_by(id) %>% 
+  mutate(time_flag = case_when(time ==0 ~ 1, T ~ 0), 
+         baseline_CD = max(time_flag * CD),
+         Y = case_when(time == max(time) ~ CD,
+                        T ~ NA),
+         lag1_A = lag(A), 
+         lag1_R = lag(R)
+      ) %>% 
+  ungroup() %>% 
+  data.table() %>% 
+  rename(t0 = time)
+
+```
+
+I used code provided by the instructor in their slides as a base for this assignment. All code in the chunk below 
+is utilized to produce estimates and bootstrap standard errors. 
+
+```{r }
+
+covparams <- 
+  list(covmodels = c(
+    A ~ lag1_A + R + lag1_R + baseline_CD + t0,
+    R ~ lag1_A + lag1_R + baseline_CD + t0)
+    )
+
+ymodel <- Y ~ R +  lag1_A + lag1_R + baseline_CD
+
+intvars <- list('A', 'A', "A", "A", "A")
+
+interventions <- list(list(c(static, c(0, 0, 0, 0, 0))),
+                      list(c(static, c(0, 0, 0, 1, 1))),
+                      list(c(static, c(0, 0, 1, 1, 1))),
+                      list(c(static, c(0, 1, 1, 1, 1))),
+                      list(c(static, c(1, 1, 1, 1, 1))))
+
+int_descript <- c('0,0,0,0,0,', 
+                  '0, 0, 0, 1, 1', 
+                  "0, 0, 1, 1, 1", 
+                  "0, 1, 1, 1, 1", 
+                  "1, 1, 1, 1, 1")
+
+res <- 
+  gformula(
+    obs_data = hiv_data_long,
+    id = 'id', 
+    time_name = 't0',
+    covnames = c('A', 'R'), 
+    outcome_name = 'Y',
+    outcome_type = 'continuous_eof', 
+    covtypes = c('binary', 'binary'),
+    histories = c(lagged), 
+    histvars = list(c('A', 'R')),
+    covparams = covparams, 
+    ymodel = ymodel,
+    intvars = intvars, 
+    interventions = interventions,
+    int_descript = int_descript,
+    basecovs = c("baseline_CD"),
+    nsimul = 10000,
+    nsamples = 10,
+    parallel = FALSE,
+    seed = 1234)
+```
+
+I removed all irrelevant output from the g-formula computation output. Only average estimate for non-parametric sample average and 
+all other treatment regimes are given in the table below: 
+
+```{r}
+#| echo: false 
+res$result %>% 
+  mutate(Treatment = c("NP", c('0,0,0,0,0 ', 
+                               '0, 0, 0, 1, 1',
+                               "0, 0, 1, 1, 1", 
+                               "0, 1, 1, 1, 1", 
+                               "1, 1, 1, 1, 1")
+                       )) %>% 
+  select(Treatment, `g-form mean`, `Mean SE`)
+```
+
+\newline 
+
+# Question 2 
+
+Uisng R-package software we obtain estiamte using IPW. 
+
+```{r}
+
+w2 <- ipwtm(exposure = A, 
+            family = "binomial", 
+            link = "logit",
+            numerator = ~ 1, 
+            denominator = ~ CD + R,
+            id = id,  
+            type = "all",
+            timevar = t0,
+            data = hiv_data_long %>% filter(t0 < 4) )
+```
+
+
+
+```{r}
+#| echo: false 
+weighted.mean(hiv_data_long %>% filter(t0 < 4) %>% select(CD) %>% unlist(), 
+              w2$ipw.weights)
+```
+
+
+```{r}
+#| echo: false 
+res_q2 <- read_rds("q2_boot.rds")
+
+sd(res_q2)
+
+```
+
+# Question 3 
+
+### 3 - A 
+
+```{r}
+#| echo: false 
+
+hw6data <- read.csv('hw6data_2023.csv')
+
+  # data structure: once dead, will stay dead 
+  #     if transplanted, then will stay transplated forever 
+  #     so we need to find when someone gets the transplant and when someone dies 
+  #     
+```
+
+```{r}
+w2 <- ipwtm(
+  exposure = transplanted,
+  family = "binomial",
+  link = "logit",
+  numerator = ~ 1,
+  
+  denominator = ~ year_round +
+    age + sex + edema + serBilir +
+    albumin + prothrombin,
+
+  id = id,
+  type = "first",
+  timevar = year_round,
+  data = hw6data
+)
+```
+
+```{r}
+#| echo: false 
+hw6data$ipw.weights <- w2$ipw.weights
+
+w2$den.mod %>% tidy()
+```
+
+### 3 - B 
+
+```{r}
+#| echo: false 
+
+trt_regime_est <- function(df_raw = hw6data, x_years){
+    
+  df_in_function <- df_raw %>% 
+    
+    mutate(trt_rule = ifelse(year_round >= x_years, 1, 0),
+           compliance = ifelse(trt_rule == transplanted, 1, 0 )) 
+  
+  df_in_function.2 <- df_in_function %>% 
+    group_by(id) %>% 
+    summarise(m = min(compliance))
+  
+  df.2 <- merge(df_raw, df_in_function.2, by= "id")
+  df.3 <- df.2 %>% group_by(id) %>% slice_tail(n=1)
+  
+  with(df.3,
+    weighted.mean(transplanted,
+                  ipw.weights * m)
+  )
+}
+
+trt_year_options <- c(0:6)
+results <- sapply(trt_year_options, function(x) trt_regime_est(df_raw = hw6data, x_years = x))
+
+```
+
+```{r}
+results
+```
+
+### 3 - C 
+
+```{r}
+#| echo: false 
+res <- read_rds("q3c_boot.rds")
+
+se_res <- apply(res, 2, sd)
+
+data.frame(trt_year = trt_year_options, 
+           estimate = results, 
+           se = se_res
+)
+
+```
+
+\newpage 
+
+# Appendix 
+
+### 2 - bootstrap 
+
+```{r question 2 bootstrap, eval = F}
+#| echo: true 
+#| 
+hiv_data_long %>% 
+  group_by(id) %>% 
+  reframe(n = n()) %>% 
+  select(n) %>% summary()
+
+## each subject has 5 ids. 
+## for bootstrap we need to resample independent data- i.e. independent clusters 
+
+B <- 250 
+
+res <- rep(NA, B)
+
+set.seed(1981)
+for(i in 1:B){
+  
+  print(i)
+  
+  hiv_data_long %>% select(id) %>% unique() -> ids
+  
+  ids2 <- ids[sample(1:nrow(ids), replace = T), ] %>% arrange(id) %>% 
+    group_by(id) %>% 
+    mutate(sec_id = 1:n()) %>% 
+    arrange(id, sec_id)
+  
+  frame_ <- rbind(ids2, ids2, ids2, ids2, ids2) %>% 
+    group_by(id, sec_id) %>% 
+    mutate(t0 = 1:n(), 
+           t0 = t0 - 1) %>% 
+    arrange(id, sec_id, t0) %>% ungroup() %>% select(-sec_id)
+  
+  boot_df <- 
+    frame_ %>% 
+    left_join(hiv_data_long, by = c('id', 't0'))
+ 
+  boot_df <- boot_df %>% select(A, CD, R, id, t0) %>% filter(t0 < 4) 
+  
+  boot_df <- as.matrix(boot_df) %>% as.data.frame() # this needs to be done to make sure there is no trace of NA values 
+  
+  w2_boot <- ipwtm(exposure = A, 
+            family = "binomial", 
+            link = "logit",
+            numerator = ~ 1, 
+            denominator = ~ CD + R,
+            id = id,  
+            type = "all",
+            timevar = t0,
+            data = boot_df )
+  
+  weighted.mean(boot_df %>% select(CD) %>% unlist(), 
+                w2_boot$ipw.weights) -> est
+  
+  res[i] <- est
+   
+}
+
+write_rds(res, "q2_boot.rds")
+
+```
+
+### 3 - C: bootstrap for point estiamtes 
+
+```{r 3c bootstrap, eval = F}
+#| echo: true 
+B <- 100
+
+res <- matrix(rep(NA, B * length(trt_year_options)
+                  ), 
+              nrow = B, 
+              ncol = length(trt_year_options)
+              )
+
+set.seed(15578)
+for(i in 1:B){
+  
+  print(i)
+  
+  ## again make sure we resample ids and get all correlated outcome within the same subject 
+  hw6data %>% select(id) %>% unique() %>% data.frame()-> ids
+  
+  ids2 <- ids[sample(1:nrow(ids), replace = T), ] %>% data.frame() %>% 
+    {colnames(.) = 'id'; .} %>% arrange(id) %>% 
+    group_by(id) %>% 
+    mutate(sec_id = 1:n()) %>% 
+    arrange(id, sec_id)
+  
+  frame_ <- rbind(ids2, ids2, ids2, ids2, ids2, ids2, ids2) %>% 
+    group_by(id, sec_id) %>% 
+    mutate(year_round = 1:n(), 
+           year_round = year_round - 1) %>% 
+    arrange(id, sec_id, year_round) %>% ungroup() %>% select(-sec_id)
+  
+  boot_df <- 
+    frame_ %>% 
+    inner_join(hw6data, by = c('id', 'year_round'))
+  
+  results_boot <- sapply(trt_year_options, function(x) trt_regime_est(df_raw = boot_df, x_years = x))
+  
+  res[i,] <- results_boot
+  
+}
+
+write_rds(res, "q3c_boot.rds")
+```
