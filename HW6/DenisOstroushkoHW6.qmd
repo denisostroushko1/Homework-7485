@@ -128,7 +128,7 @@ all other treatment regimes are given in the table below:
 ```{r}
 #| echo: false 
 res$result %>% 
-  mutate(Treatment = c("NP", c('0,0,0,0,0 ', 
+  mutate(Treatment = c("NP", c('0, 0, 0, 0, 0 ', 
                                '0, 0, 0, 1, 1',
                                "0, 0, 1, 1, 1", 
                                "0, 1, 1, 1, 1", 
@@ -137,11 +137,10 @@ res$result %>%
   select(Treatment, `g-form mean`, `Mean SE`)
 ```
 
-\newline 
 
 # Question 2 
 
-Uisng R-package software we obtain estiamte using IPW. 
+Using R-package software we obtain estimate using IPW. 
 
 ```{r}
 
@@ -156,21 +155,60 @@ w2 <- ipwtm(exposure = A,
             data = hiv_data_long %>% filter(t0 < 4) )
 ```
 
-
+Then, I subset the data to have only patients with the desired treatment sequence, and using obtained IPW weights, I create
+expected average response for a given sequence. 
 
 ```{r}
 #| echo: false 
-weighted.mean(hiv_data_long %>% filter(t0 < 4) %>% select(CD) %>% unlist(), 
-              w2$ipw.weights)
+
+hiv_data_long %>% 
+  filter(t0 < 4) %>% 
+  select(id, A) %>% 
+  group_by(id) %>% 
+  mutate(trt_seq = paste(A, collapse = ",")) %>% 
+  select(-A) %>% 
+  ungroup() %>% 
+  unique() -> trt_seqs
+
+hiv_data_long2 <- hiv_data_long %>% filter(t0 < 4)
+hiv_data_long2$ipw.weights <- w2$ipw.weights
+
+q2_est <- function(data = hiv_data_long2, trt_seqs_vec = trt_seqs, trt_sequence){
+  
+  ids_for_seq <- trt_seqs_vec %>% filter(trt_seq %in% trt_sequence) %>% select(id) %>% unlist()
+
+  data_f <- data %>% filter(id %in% ids_for_seq)
+
+  weighted.mean(data_f %>% select(CD) %>% unlist(),
+                data_f$ipw.weights)
+  
+}
+
+trt_sequences <-c( '0,0,0,0', 
+                    '0,0,0,1',
+                     "0,0,1,1", 
+                     "0,1,1,1", 
+                     "1,1,1,1")
+
+results = sapply(trt_sequences, function(x){q2_est(trt_sequence = x)}) 
+
 ```
 
+
+Using bootstrap procedure, I resample the data, re-estimate the weights, and get standard errors for each average. 
+Code for bootstrap is in the appendix. I made sure to resample entire sequences for the same patient to account for 
+correlation within a subject and get approximately correct variance estimator. Results, the final answer, is given below: 
 
 ```{r}
 #| echo: false 
 res_q2 <- read_rds("q2_boot.rds")
 
-sd(res_q2)
+se_res <- apply(res_q2, 2, sd)
 
+data.frame(trt_year = trt_sequences, 
+           estimate = results, 
+           se = se_res
+)
 ```
 
 # Question 3 
@@ -183,10 +221,12 @@ sd(res_q2)
 hw6data <- read.csv('hw6data_2023.csv')
 
   # data structure: once dead, will stay dead 
-  #     if transplanted, then will stay transplated forever 
+  #     if transplanted, then will stay transplanted forever 
   #     so we need to find when someone gets the transplant and when someone dies 
   #     
 ```
+
+Uisng fucntion below, we obtain a model estimated by the software: 
 
 ```{r}
 w2 <- ipwtm(
@@ -243,11 +283,16 @@ results <- sapply(trt_year_options, function(x) trt_regime_est(df_raw = hw6data,
 
 ```
 
+Average expected number of patients who are alive at the end of the timeline is given below
+
 ```{r}
+names(results) <- paste0("Transplant at year ", 0:6)
 results
 ```
 
 ### 3 - C 
+
+Code for the bootstrap procedure is given in the appendix. Again, I made sure to resample the data such that entire sequence for the same patient is resampled. 
 
 ```{r}
 #| echo: false 
@@ -279,9 +324,11 @@ hiv_data_long %>%
 ## each subject has 5 ids. 
 ## for bootstrap we need to resample independent data- i.e. independent clusters 
 
-B <- 250 
-
-res <- rep(NA, B)
+B <- 250
+res <- matrix(rep(NA, B * 5), 
+              nrow = B, 
+              ncol = 5
+              )
 
 set.seed(1981)
 for(i in 1:B){
@@ -319,11 +366,15 @@ for(i in 1:B){
             timevar = t0,
             data = boot_df )
   
-  weighted.mean(boot_df %>% select(CD) %>% unlist(), 
-                w2_boot$ipw.weights) -> est
+  boot_df <- 
+    boot_df %>% 
+    filter(t0 < 4) %>% 
+    mutate(ipw.weights = w2_boot$ipw.weights)
+  ### reuse list of ids for each sequence that we had previously, and everything else 
+  ### used in estimation for problem 2 
   
-  res[i] <- est
-   
+  res[i,] <- sapply(trt_sequences, function(x){q2_est(data = boot_df, trt_sequence = x)}) 
+  
 }
 
 write_rds(res, "q2_boot.rds")
