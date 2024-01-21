@@ -13,6 +13,22 @@ header-includes: \usepackage{float}
 source("Packages.R")
 ```
 
+# Prelude 
+This document presents the final project completed collaboratively with fellow students as part of PUBH 7485: Methods in Causal Inference at the University of Minnesota School of Public Health in the Fall of 2023, a requirement in my MS Biostatistics Curriculum.
+
+All relevant work files, including the `.qmd` file for document generation, are accessible in my [GitHub repository](https://github.com/denisostroushko1/Homework-7485/tree/main/Project%20Final%20Version%20Working%20Folder). The repository contains : 
+  - code for making simulated data set 
+  - code for performing a causal inference analysis on one draw of said data set
+  - code for storing all data that we need for the study of simulation results 
+  - scripts to interface with the computing cluster
+  - final report reproducible document 
+
+This study is our first collective experience in research of statistical methods. We all were intrigued by the idea of finding a 'go-to' method for selecting variables to conduct a causal inference analysis in our careers beyond graduate school. 
+We concluded that outcome adaptive LASSO variable selection is the best way to select variable for regression adjustment in 
+the context of causal inference. 
+
+This document serves as a practical example of the final reports I can produce in my role as a data scientist or statistician. For more samples and a comprehensive view of my work, please explore my [portfolio](https://denisostroushko1.github.io/), showcasing various reports, studies, dashboards, and other analytical files.
+
 
 
 ```{r load and transform needed data }
