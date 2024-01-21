@@ -115,7 +115,6 @@ I find and use for the analysis.
     - [G formula with Multiple Imputation](https://thestatsgeek.com/2023/01/31/g-formula-for-causal-inference-via-multiple-imputation/)
   + `ipw`: package for inverse probability weighting. Allows to IP weight time varying treatment indicators, i.e. when we 
     observe of sequence of treatment indicators (decisions) for a single patient 
-    - 
     
 # Final Project
 
